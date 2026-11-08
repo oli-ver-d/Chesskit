@@ -10,6 +10,9 @@ import { useRouter } from "next/router";
 import NavLink from "@/components/NavLink";
 import Image from "next/image";
 import { styled } from "@mui/material/styles";
+import Tooltip from "@mui/material/Tooltip";
+import { useSetAtom } from "jotai";
+import { coachSettingsOpenAtom } from "@/sections/coach/states";
 
 interface Props {
   darkMode: boolean;
@@ -31,6 +34,7 @@ const StyledIconButtonLink = styled("a")({
 export default function NavBar({ darkMode, switchDarkMode }: Props) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const router = useRouter();
+  const setCoachSettingsOpen = useSetAtom(coachSettingsOpenAtom);
 
   useEffect(() => {
     setDrawerOpen(false);
@@ -79,6 +83,17 @@ export default function NavBar({ darkMode, switchDarkMode }: Props) {
               Chesskit
             </Typography>
           </NavLink>
+
+          <Tooltip title="AI Coach settings">
+            <IconButton
+              color="inherit"
+              onClick={() => setCoachSettingsOpen(true)}
+              aria-label="AI Coach settings"
+              sx={{ mr: "min(0.6rem, 0.8vw)" }}
+            >
+              <Icon icon="mdi:robot-happy-outline" />
+            </IconButton>
+          </Tooltip>
 
           <StyledIconButtonLink
             href="https://discord.gg/Yr99abAcUr"

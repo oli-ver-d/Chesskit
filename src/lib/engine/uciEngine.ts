@@ -403,6 +403,31 @@ export class UciEngine {
     return parseEvaluationResults(results, fen);
   }
 
+  /**
+   * Full-strength evaluation that queues behind other jobs instead of
+   * cancelling them. Used by the AI coach.
+   */
+  public async analysePosition(fen: string, depth = 14): Promise<PositionEval> {
+    this.throwErrorIfNotReady();
+    const whoIsCheckmated = getWhoIsCheckmated(fen);
+    if (whoIsCheckmated) {
+      return {
+        lines: [
+          {
+            pv: [],
+            depth: 0,
+            multiPv: 1,
+            mate: whoIsCheckmated === "w" ? -1 : 1,
+          },
+        ],
+      };
+    }
+    if (getIsStalemate(fen)) {
+      return { lines: [{ pv: [], depth: 0, multiPv: 1, cp: 0 }] };
+    }
+    return this.evaluatePosition(fen, depth);
+  }
+
   public async getEngineNextMove(
     fen: string,
     elo: number,

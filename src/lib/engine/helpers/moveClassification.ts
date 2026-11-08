@@ -20,7 +20,15 @@ export const getMovesClassification = (
 
     const currentFen = fens[index].split(" ")[0];
     const opening = openings.find((opening) => opening.fen === currentFen);
-    if (opening) {
+    // Named "openings" also include dubious gambits: don't call a move a book
+    // move if it clearly worsens the position for the side that played it.
+    const isOpeningSound =
+      opening &&
+      (positionsWinPercentage[index] - positionsWinPercentage[index - 1]) *
+        (fens[index - 1].split(" ")[1] === "w" ? 1 : -1) >=
+        -5;
+    if (opening) currentOpening = opening.name;
+    if (opening && isOpeningSound) {
       currentOpening = opening.name;
       return {
         ...rawPosition,

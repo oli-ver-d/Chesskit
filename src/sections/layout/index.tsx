@@ -1,6 +1,7 @@
 import { CssBaseline, ThemeProvider, createTheme } from "@mui/material";
 import { PropsWithChildren, useMemo } from "react";
 import NavBar from "./NavBar";
+import CoachSettingsDialog from "@/sections/coach/coachSettingsDialog";
 import { red } from "@mui/material/colors";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { MAIN_THEME_COLOR } from "@/constants";
@@ -37,6 +38,7 @@ export default function Layout({ children }: PropsWithChildren) {
         switchDarkMode={() => setDarkMode((val) => !val)}
       />
       <main style={{ margin: "2vh 1vw" }}>{children}</main>
+      <CoachSettingsDialog />
     </ThemeProvider>
   );
 }

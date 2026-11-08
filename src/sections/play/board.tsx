@@ -16,6 +16,7 @@ import Board from "@/components/board";
 import { useGameData } from "@/hooks/useGameData";
 import { usePlayersData } from "@/hooks/usePlayersData";
 import { sleep } from "@/lib/helpers";
+import { hintArrowsAtom, showPlayMoveIconAtom } from "./coach/states";
 
 export default function BoardContainer() {
   const screenSize = useScreenSize();
@@ -27,6 +28,7 @@ export default function BoardContainer() {
   const { playMove } = useChessActions(gameAtom);
   const engineElo = useAtomValue(engineEloAtom);
   const isGameInProgress = useAtomValue(isGameInProgressAtom);
+  const hintArrows = useAtomValue(hintArrowsAtom);
 
   const gameFen = game.fen();
   const isGameFinished = game.isGameOver();
@@ -79,6 +81,8 @@ export default function BoardContainer() {
       blackPlayer={black}
       boardOrientation={playerColor}
       currentPositionAtom={gameDataAtom}
+      showPlayerMoveIconAtom={showPlayMoveIconAtom}
+      extraArrows={hintArrows}
     />
   );
 }

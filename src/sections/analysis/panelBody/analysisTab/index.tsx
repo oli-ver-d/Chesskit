@@ -10,6 +10,7 @@ import PlayersMetric from "./playersMetric";
 import MoveInfo from "./moveInfo";
 import Opening from "./opening";
 import EngineLines from "./engineLines";
+import CoachComment from "./coachComment";
 
 export default function AnalysisTab(props: GridProps) {
   const gameEval = useAtomValue(gameEvalAtom);
@@ -63,6 +64,8 @@ export default function AnalysisTab(props: GridProps) {
         <MoveInfo />
 
         <Opening />
+
+        <CoachComment />
 
         {isGameOver && (
           <Typography align="center" fontSize="0.9rem" noWrap>

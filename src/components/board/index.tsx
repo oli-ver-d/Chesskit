@@ -34,6 +34,7 @@ export interface Props {
   showBestMoveArrow?: boolean;
   showPlayerMoveIconAtom?: PrimitiveAtom<boolean>;
   showEvaluationBar?: boolean;
+  extraArrows?: Arrow[];
 }
 
 export default function Board({
@@ -48,6 +49,7 @@ export default function Board({
   showBestMoveArrow = false,
   showPlayerMoveIconAtom,
   showEvaluationBar = false,
+  extraArrows,
 }: Props) {
   const boardRef = useRef<HTMLDivElement>(null);
   const game = useAtomValue(gameAtom);
@@ -227,11 +229,11 @@ export default function Board({
           .toHexString(),
       ] as Arrow;
 
-      return [bestMoveArrow];
+      return [bestMoveArrow, ...(extraArrows ?? [])];
     }
 
-    return [];
-  }, [position, showBestMoveArrow, boardHue]);
+    return extraArrows ?? [];
+  }, [position, showBestMoveArrow, boardHue, extraArrows]);
 
   const SquareRenderer: CustomSquareRenderer = useMemo(() => {
     return getSquareRenderer({

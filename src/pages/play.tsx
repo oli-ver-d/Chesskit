@@ -6,6 +6,7 @@ import GameSettingsButton from "@/sections/play/gameSettings/gameSettingsButton"
 import { isGameInProgressAtom } from "@/sections/play/states";
 import { Grid2 as Grid } from "@mui/material";
 import { useAtomValue } from "jotai";
+import CoachPanel from "@/sections/play/coach/coachPanel";
 
 export default function Play() {
   const isGameInProgress = useAtomValue(isGameInProgressAtom);
@@ -37,12 +38,13 @@ export default function Play() {
         padding={3}
         rowGap={3}
         style={{
-          maxWidth: "400px",
+          maxWidth: "440px",
         }}
       >
         <GameInProgress />
         {!isGameInProgress && <GameSettingsButton />}
         <GameRecap />
+        <CoachPanel />
       </Grid>
     </Grid>
   );
