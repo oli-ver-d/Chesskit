@@ -15,9 +15,10 @@ import {
   GameResultForMe,
   MoveDigest,
 } from "@/types/training";
+import { TRAINING_THRESHOLDS } from "./thresholds";
 
 /** Bump when digest logic changes: stored digests are rebuilt (no re-analysis) */
-export const DIGEST_VERSION = 2;
+export const DIGEST_VERSION = 3;
 
 /** A move must lose at least this much win chance to count as leaving a piece hanging */
 const HUNG_PIECE_MIN_LOSS = 10;
@@ -48,6 +49,27 @@ const mateForMover = (line: LineEval | undefined, color: Color) =>
 
 const getBestUci = (position: PositionEval | undefined) =>
   position?.bestMove ?? position?.lines[0]?.pv[0];
+
+/** Other stored lines' first moves that are about as good as the best line */
+const getAltUci = (
+  position: PositionEval,
+  color: Color,
+  bestUci: string | undefined,
+  winBest: number
+): string[] | undefined => {
+  const alts = position.lines
+    .slice(1)
+    .filter((line) => {
+      const win = whiteWin(line);
+      return (
+        win !== undefined &&
+        winBest - forMover(win, color) <= TRAINING_THRESHOLDS.acceptMargin
+      );
+    })
+    .map((line) => line.pv[0])
+    .filter((uci) => uci && uci !== bestUci);
+  return alts.length ? [...new Set(alts)] : undefined;
+};
 
 /**
  * If the opponent's best reply to the move captures a piece (not a pawn) that
@@ -150,6 +172,8 @@ export const buildGameDigest = (game: Game): GameDigest | undefined => {
       !!before.moveClassification &&
       ERROR_CLASSIFICATIONS.includes(before.moveClassification);
 
+    const bestUci = getBestUci(before);
+
     return {
       ply,
       moveNumber: Math.floor(ply / 2) + 1,
@@ -161,7 +185,8 @@ export const buildGameDigest = (game: Game): GameDigest | undefined => {
       classification: after.moveClassification,
       winBefore,
       winAfter,
-      bestUci: getBestUci(before),
+      bestUci,
+      altUci: getAltUci(before, color, bestUci, winBefore),
       secondBestGap,
       phase: getGamePhase(move.before, ply) as GamePhase,
       clockAfter: parseClockComment(comments.get(move.after))?.totalSeconds,

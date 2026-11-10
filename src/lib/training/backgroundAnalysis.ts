@@ -1,5 +1,5 @@
 import { getEvaluateGameParams, getGameFromPgn } from "@/lib/chess";
-import { getDb } from "@/lib/db";
+import { getDb, getMeta } from "@/lib/db";
 import {
   getGameMetaFromHeaders,
   getMyColor,
@@ -11,6 +11,8 @@ import { UciEngine } from "@/lib/engine/uciEngine";
 import { Game } from "@/types/game";
 import { GameDigest } from "@/types/training";
 import { buildGameDigest, isDigestStale } from "./digest";
+import { PUZZLE_VERSION } from "./puzzles";
+import { PUZZLE_VERSION_KEY, writeGamePuzzles } from "./puzzleStore";
 
 export const BATCH_ANALYSIS = { depth: 14, multiPv: 3 };
 
@@ -22,6 +24,7 @@ export interface RefreshResult {
   toAnalyze: number[];
   gamesChanged: boolean;
   digestsChanged: boolean;
+  puzzlesChanged: boolean;
 }
 
 const sortNewestFirst = (a: Game, b: Game) =>
@@ -32,7 +35,9 @@ const sortNewestFirst = (a: Game, b: Game) =>
  * 1. backfills metadata on games saved before DB v2,
  * 2. updates `myColor` from the profile usernames,
  * 3. (re)builds stale digests and drops orphaned ones,
- * 4. lists your recent games that still need engine analysis.
+ * 4. regenerates the puzzles of every changed digest (or of all digests when
+ *    the puzzle logic changed),
+ * 5. lists your recent games that still need engine analysis.
  */
 export const refreshTrainingData = async (
   identity: Identity,
@@ -73,9 +78,8 @@ export const refreshTrainingData = async (
     (game) => updatedGames.find((g) => g.id === game.id) ?? game
   );
 
-  const digests = new Map(
-    (await db.getAll("digests")).map((digest) => [digest.gameId, digest])
-  );
+  const storedDigests = await db.getAll("digests");
+  const digests = new Map(storedDigests.map((d) => [d.gameId, d]));
 
   const digestsToPut: GameDigest[] = [];
   const digestsToDelete: number[] = [];
@@ -100,13 +104,34 @@ export const refreshTrainingData = async (
   // Digests left in the map belong to deleted games
   digestsToDelete.push(...digests.keys());
 
-  if (digestsToPut.length || digestsToDelete.length) {
-    const tx = db.transaction("digests", "readwrite");
-    await Promise.all([
-      ...digestsToPut.map((d) => tx.store.put(d)),
-      ...digestsToDelete.map((id) => tx.store.delete(id)),
-      tx.done,
-    ]);
+  // Games whose puzzles must be regenerated, with their new digest (or none)
+  const puzzleGames = new Map<number, GameDigest | undefined>();
+  const puzzlesOutdated =
+    (await getMeta<number>(PUZZLE_VERSION_KEY)) !== PUZZLE_VERSION;
+  if (puzzlesOutdated) {
+    storedDigests.forEach((d) => puzzleGames.set(d.gameId, d));
+  }
+  digestsToPut.forEach((d) => puzzleGames.set(d.gameId, d));
+  digestsToDelete.forEach((id) => puzzleGames.set(id, undefined));
+
+  let puzzlesChanged = false;
+  if (puzzleGames.size || puzzlesOutdated) {
+    const now = Date.now();
+    const tx = db.transaction(["digests", "puzzles", "meta"], "readwrite");
+    const digestStore = tx.objectStore("digests");
+    const puzzleStore = tx.objectStore("puzzles");
+    // Same transaction, so a digest is never saved without its puzzles
+    for (const d of digestsToPut) await digestStore.put(d);
+    for (const id of digestsToDelete) await digestStore.delete(id);
+    for (const [gameId, digest] of puzzleGames) {
+      if (await writeGamePuzzles(puzzleStore, gameId, digest, now)) {
+        puzzlesChanged = true;
+      }
+    }
+    if (puzzlesOutdated) {
+      await tx.objectStore("meta").put(PUZZLE_VERSION, PUZZLE_VERSION_KEY);
+    }
+    await tx.done;
   }
 
   const toAnalyze = currentGames
@@ -120,6 +145,7 @@ export const refreshTrainingData = async (
     toAnalyze,
     gamesChanged: updatedGames.length > 0,
     digestsChanged: digestsToPut.length + digestsToDelete.length > 0,
+    puzzlesChanged,
   };
 };
 
@@ -171,9 +197,11 @@ export const analyzeSavedGame = async (
   const analyzed: Game = { ...fresh, eval: gameEval };
   const digest = buildGameDigest(analyzed);
 
-  const tx = db.transaction(["games", "digests"], "readwrite");
+  const tx = db.transaction(["games", "digests", "puzzles"], "readwrite");
   await tx.objectStore("games").put(analyzed);
   if (digest) await tx.objectStore("digests").put(digest);
+  else await tx.objectStore("digests").delete(gameId);
+  await writeGamePuzzles(tx.objectStore("puzzles"), gameId, digest, Date.now());
   await tx.done;
 
   return true;

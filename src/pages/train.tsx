@@ -3,6 +3,7 @@ import { Icon } from "@iconify/react";
 import { useRouter } from "next/router";
 import { PageTitle } from "@/components/pageTitle";
 import ProfileCard from "@/sections/training/profileCard";
+import PuzzlesTab from "@/sections/training/puzzles/puzzlesTab";
 
 const TABS = [
   {
@@ -78,14 +79,20 @@ export default function Train() {
           ))}
         </Tabs>
 
-        <Paper variant="outlined" sx={{ p: 3, mt: 2 }}>
-          <Typography variant="h6" gutterBottom>
-            {current.label}: coming soon
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {current.description}
-          </Typography>
-        </Paper>
+        <Box mt={2}>
+          {tab === "puzzles" ? (
+            <PuzzlesTab />
+          ) : (
+            <Paper variant="outlined" sx={{ p: 3 }}>
+              <Typography variant="h6" gutterBottom>
+                {current.label}: coming soon
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {current.description}
+              </Typography>
+            </Paper>
+          )}
+        </Box>
       </Box>
     </Stack>
   );

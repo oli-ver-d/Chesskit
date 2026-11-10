@@ -39,6 +39,7 @@ Docker alternative: `HOST_UID=$(id -u) HOST_GID=$(id -g) COMMAND=dev docker comp
   - It pauses while a Play game is in progress, while the Analysis page is evaluating, or when you pause it from the NavBar indicator.
   - A game already being analyzed always finishes, because `evaluateGame` can't be cancelled safely.
 - A `GameDigest` (`lib/training/digest.ts`) holds per-move facts from your point of view: win chance before and after the move, best move, gap to the second-best move, phase, clock, hung piece, missed mate. Puzzles, insights and the repertoire should read digests rather than re-parse PGNs. Bump `DIGEST_VERSION` when digest logic changes; stored digests then rebuild from the saved evals without re-running the engine.
+- Puzzles (`lib/training/puzzles.ts`, `schedule.ts`, `puzzleStore.ts`; UI in `sections/training/puzzles/`) are extracted from digests whenever a digest changes, in the same transaction. Bump `PUZZLE_VERSION` when extraction logic changes; regenerated puzzles keep their Leitner box. Thresholds are in `TRAINING_THRESHOLDS` (`lib/training/thresholds.ts`). Every attempt is logged to `trainingLog`.
 - Deep link: `/?gameId=X&ply=N` opens a saved game at the position after N half-moves. `ply` in a digest is the index of the move, so `ply=digest.ply` shows the position before that move.
 
 **Engine pipeline:**

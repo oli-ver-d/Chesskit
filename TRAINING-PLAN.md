@@ -120,7 +120,17 @@ Add `vitest` as a dev dependency with an `npm test` script, covering `src/lib/tr
 
 ---
 
-## 4. Puzzles from your mistakes (milestone 2)
+## 4. Puzzles from your mistakes (milestone 2): DONE
+
+> **Status (2026-11-10):** built and tested in the browser on real chess.com games. Where it differs from the plan below:
+> - Extraction reads only the digest. The digest gained `altUci` (other stored engine moves within 3% of the best one; `DIGEST_VERSION` 3), which becomes the puzzle's `acceptUci`.
+> - `kind` is "blunder" when your move left you under 45% win chance, otherwise "missed-chance". `missed-punish` is a theme rather than a kind.
+> - Puzzles are regenerated inside the daemon whenever a game's digest changes, in the same transaction as the digest. Bumping `PUZZLE_VERSION` regenerates every game's puzzles. A regenerated puzzle keeps its box and history; one that no longer qualifies is deleted.
+> - Thresholds live in `TRAINING_THRESHOLDS` (`lib/training/thresholds.ts`).
+> - Grading: a move in `acceptUci` is correct at once. Any other move is checked live at depth 16 and accepted if your win chance stays within 3% of the stored best.
+> - Hints escalate per wrong try or "Hint" press: 1 = nudge (LLM `buildPuzzleCoachMessages` level 1, or a static theme hint), 2 = the piece to move is outlined, 3 = the answer is shown (counts as failed). "Show solution" jumps straight to 3.
+> - The queue skips a new puzzle whose position is already queued (the same mistake in another game). "Keep going" ignores the daily cap of 10 new puzzles.
+> - Not built: multi-move puzzles (optional v2).
 
 ### Extraction (`lib/training/puzzles.ts`, pure, runs on each new digest)
 A move `m` with `isMine` becomes a puzzle at `fenBefore` when all of these hold:

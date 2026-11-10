@@ -40,7 +40,7 @@ const getPauseReason = (
 
 /**
  * Keeps training data up to date in the background: imports your chess.com
- * games, backfills game metadata, builds digests, and analyzes your recent
+ * games, backfills game metadata, builds digests and puzzles, and analyzes your recent
  * unanalyzed games one at a time (games queued with "Re-analyze" first).
  * Mounted once in the layout so it survives page changes. Renders nothing.
  */
@@ -94,7 +94,7 @@ export default function TrainingDaemon() {
       debounce = setTimeout(wake, RESCAN_DEBOUNCE_MS);
     });
 
-    const notify = (stores: ("games" | "digests")[]) => {
+    const notify = (stores: ("games" | "digests" | "puzzles")[]) => {
       selfWriting = true;
       stores.forEach(notifyDbChange);
       selfWriting = false;
@@ -128,12 +128,11 @@ export default function TrainingDaemon() {
           continue;
         }
         if (stopped) return;
-        if (refresh.gamesChanged || refresh.digestsChanged) {
-          notify([
-            ...(refresh.gamesChanged ? (["games"] as const) : []),
-            ...(refresh.digestsChanged ? (["digests"] as const) : []),
-          ]);
-        }
+        notify([
+          ...(refresh.gamesChanged ? (["games"] as const) : []),
+          ...(refresh.digestsChanged ? (["digests"] as const) : []),
+          ...(refresh.puzzlesChanged ? (["puzzles"] as const) : []),
+        ]);
 
         const prioritized = priority.filter((id) => !unanalyzable.has(id));
         if (prioritized.length !== priority.length) {
@@ -207,7 +206,7 @@ export default function TrainingDaemon() {
 
         if (force) setPriority((ids) => ids.filter((id) => id !== gameId));
         if (stopped) return;
-        notify(["games", "digests"]);
+        notify(["games", "digests", "puzzles"]);
         dirty = true;
       }
     };

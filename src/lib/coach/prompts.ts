@@ -330,3 +330,84 @@ Keep the whole review under 250 words.`,
     },
   ];
 };
+
+export interface PuzzleCoachInput {
+  /** Puzzle position, the player to move */
+  fen: string;
+  bestUci: string;
+  /** Engine's best line from `fen` (starts with the best move) */
+  bestLine?: string[];
+  /** The move the player chose in their game, and the engine's punishment of it */
+  playedUci: string;
+  playedFenAfter?: string;
+  punishLine?: string[];
+  themes: string[];
+  /** 1: nudge without naming the move. 3: reveal and explain the answer. */
+  level: 1 | 3;
+}
+
+const PUZZLE_THEME_FACTS: Record<string, string> = {
+  "missed-mate": "There is a forced checkmate for the player in this position.",
+  "missed-capture":
+    "The best move captures an opponent piece that is not properly defended.",
+  "hung-piece":
+    "In the game, the player's move left one of their pieces hanging.",
+  "missed-punish":
+    "The opponent's previous move was a mistake, and the best move punishes it.",
+};
+
+export const buildPuzzleCoachMessages = (
+  input: PuzzleCoachInput
+): ChatMessage[] => {
+  const player = input.fen.split(" ")[1] as "w" | "b";
+  const opponent = player === "w" ? "b" : "w";
+  const bestSan = uciToSan(input.fen, input.bestUci) ?? input.bestUci;
+  const playedSan = uciToSan(input.fen, input.playedUci) ?? input.playedUci;
+  const secret = input.level === 1 ? " (SECRET, do not reveal)" : "";
+
+  const facts = [
+    `This is a puzzle from the player's own game. The player (${colorName(player)}) is to move.`,
+    `Position (FEN): ${input.fen}`,
+    `Engine's best move${secret}: ${bestSan}${
+      input.bestLine?.length
+        ? ` (line: ${pvToSan(input.fen, input.bestLine)})`
+        : ""
+    }`,
+    `In the game the player played ${playedSan} instead.`,
+  ];
+  if (input.playedFenAfter && input.punishLine?.length) {
+    facts.push(
+      `${colorName(opponent)}'s best reply to ${playedSan}: ${pvToSan(
+        input.playedFenAfter,
+        input.punishLine,
+        4
+      )}`
+    );
+  }
+  for (const theme of input.themes) {
+    if (PUZZLE_THEME_FACTS[theme]) facts.push(PUZZLE_THEME_FACTS[theme]);
+  }
+  const oppHanging = getHangingPieces(input.fen, opponent);
+  if (oppHanging.length) {
+    facts.push(
+      `Opponent pieces that can be attacked: ${oppHanging.join(", ")}`
+    );
+  }
+  const playerHanging = getHangingPieces(input.fen, player);
+  if (playerHanging.length) {
+    facts.push(
+      `Player's pieces currently en prise: ${playerHanging.join(", ")}`
+    );
+  }
+  facts.push(`Material: ${describeMaterial(input.fen)}`);
+
+  const task =
+    input.level === 1
+      ? 'The player is trying to solve the puzzle and got it wrong. Give a nudge in ONE short sentence, talking to the player as "you". Point at the idea (a tactic, an undefended piece, a weakness, a threat) WITHOUT naming the best move, the piece that moves, or its destination square.'
+      : `Talking to the player as "you", explain in 2-3 short sentences why ${bestSan} is the right move (what it wins, threatens or prevents, following the engine line) and what went wrong with ${playedSan} in the game.`;
+
+  return [
+    { role: "system", content: SYSTEM_PROMPT },
+    { role: "user", content: `${facts.join("\n")}\n\nTask: ${task}` },
+  ];
+};

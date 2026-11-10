@@ -20,6 +20,8 @@ export interface MoveDigest {
   winAfter: number;
   /** Engine's best move in `fenBefore` */
   bestUci?: string;
+  /** Other stored engine moves within `acceptMargin` of the best one */
+  altUci?: string[];
   /** Best line minus second-best line win chance for the mover (puzzle uniqueness) */
   secondBestGap?: number;
   phase: GamePhase;
@@ -50,21 +52,44 @@ export interface GameDigest {
   leftRepertoireAtPly?: number;
 }
 
+export type PuzzleTheme =
+  | "hung-piece"
+  | "missed-mate"
+  | "missed-capture"
+  | "missed-punish"
+  | GamePhase;
+
+/** How a puzzle attempt went, for the spaced repetition */
+export type PuzzleResult = "clean" | "hinted" | "failed";
+
 export interface Puzzle {
   /** `${gameId}:${ply}` */
   id: string;
   gameId: number;
+  /** Index of your move in the game (the position before it is the puzzle) */
   ply: number;
   fen: string;
   myColor: Color;
   bestUci: string;
+  /** Moves that solve it: the best move and stored lines within `acceptMargin` */
   acceptUci: string[];
+  /** The move you played in the game */
   playedUci: string;
   kind: "blunder" | "missed-chance";
-  themes: string[];
+  themes: PuzzleTheme[];
+  /** Your win chance with the best move, and after the move you played */
+  winBefore: number;
+  winAfter: number;
+  /** End time of the game, to show newer mistakes first */
+  endTime?: number;
+  /** Leitner box: 0 = never attempted */
   box: number;
   dueAt: number;
   createdAt: number;
+  attempts: number;
+  firstAttemptAt?: number;
+  lastAttemptAt?: number;
+  lastResult?: PuzzleResult;
 }
 
 export interface RepertoireNode {

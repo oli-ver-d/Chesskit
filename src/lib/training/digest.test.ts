@@ -100,6 +100,8 @@ describe("buildGameDigest", () => {
       bestUci: "e2e4",
       phase: "opening",
       clockAfter: 179.5,
+      // d4 is within 3% of e4
+      altUci: ["d2d4"],
     });
     expect(e5).toMatchObject({ isMine: false, moveNumber: 1, clockAfter: 178 });
 
@@ -110,6 +112,7 @@ describe("buildGameDigest", () => {
     expect(nf6.winBefore).toBeGreaterThan(45);
     expect(nf6.winAfter).toBe(0);
     expect(nf6.secondBestGap).toBeGreaterThan(20);
+    expect(nf6.altUci).toBeUndefined();
 
     // White found the mate
     const qxf7 = digest.moves[6];

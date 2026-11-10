@@ -10,7 +10,14 @@ import {
   Square,
 } from "react-chessboard/dist/chessboard/types";
 import { useChessActions } from "@/hooks/useChessActions";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  CSSProperties,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Color, MoveClassification } from "@/types/enums";
 import { Chess } from "chess.js";
 import { getSquareRenderer } from "./squareRenderer";
@@ -35,6 +42,8 @@ export interface Props {
   showPlayerMoveIconAtom?: PrimitiveAtom<boolean>;
   showEvaluationBar?: boolean;
   extraArrows?: Arrow[];
+  /** Extra styles per square, e.g. a hint highlight */
+  customSquareStyles?: Record<string, CSSProperties>;
 }
 
 export default function Board({
@@ -50,6 +59,7 @@ export default function Board({
   showPlayerMoveIconAtom,
   showEvaluationBar = false,
   extraArrows,
+  customSquareStyles,
 }: Props) {
   const boardRef = useRef<HTMLDivElement>(null);
   const game = useAtomValue(gameAtom);
@@ -334,6 +344,7 @@ export default function Board({
             customArrows={customArrows}
             isDraggablePiece={isPiecePlayable}
             customSquare={SquareRenderer}
+            customSquareStyles={customSquareStyles}
             onSquareClick={handleSquareLeftClick}
             onSquareRightClick={handleSquareRightClick}
             onPieceDragBegin={handlePieceDragBegin}
