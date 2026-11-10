@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint --ext .ts,.tsx src/ && tsc --noEmit",
+    "test": "vitest run",
     "deploy": "npm run lint && npm run build && cdk deploy"
   },
   "dependencies": {
@@ -49,6 +50,7 @@
     "eslint-plugin-deprecation": "^3.0.0",
     "eslint-plugin-import": "^2.31.0",
     "eslint-plugin-prettier": "^5.2.1",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.7"
   }
 }

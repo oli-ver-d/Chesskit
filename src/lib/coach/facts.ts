@@ -12,7 +12,7 @@ const PIECE_NAMES: Record<PieceSymbol, string> = {
   k: "king",
 };
 
-const PIECE_VALUES: Record<PieceSymbol, number> = {
+export const PIECE_VALUES: Record<PieceSymbol, number> = {
   p: 1,
   n: 3,
   b: 3,

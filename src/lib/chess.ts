@@ -4,6 +4,7 @@ import { Chess, PieceSymbol, Square } from "chess.js";
 import { getPositionWinPercentage } from "./engine/helpers/winPercentage";
 import { Color } from "@/types/enums";
 import { Piece } from "react-chessboard/dist/chessboard/types";
+import { getGameMetaFromHeaders } from "./gameMeta";
 
 export const getEvaluateGameParams = (game: Chess): EvaluateGameParams => {
   const history = game.history({ verbose: true });
@@ -45,6 +46,28 @@ export const formatGameToDatabase = (game: Chess): Omit<Game, "id"> => {
     result: headers.Result,
     termination: headers.Termination,
     timeControl: headers.TimeControl,
+    ...getGameMetaFromHeaders(headers),
+  };
+};
+
+/** Parses a `[%clk h:mm:ss(.t)]` PGN comment */
+export const parseClockComment = (comment: string | undefined) => {
+  if (!comment) return undefined;
+
+  const match = comment.match(/\[%clk (\d+):(\d+):(\d+)(?:\.(\d*))?\]/);
+  if (!match) return undefined;
+
+  const hours = parseInt(match[1]);
+  const minutes = parseInt(match[2]);
+  const seconds = parseInt(match[3]);
+  const tenths = match[4] ? parseInt(match[4][0]) : 0;
+
+  return {
+    hours,
+    minutes,
+    seconds,
+    tenths,
+    totalSeconds: hours * 3600 + minutes * 60 + seconds + tenths / 10,
   };
 };
 

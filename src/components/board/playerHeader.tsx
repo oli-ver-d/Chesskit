@@ -6,6 +6,7 @@ import { PrimitiveAtom, useAtomValue } from "jotai";
 import { Chess } from "chess.js";
 import { useMemo } from "react";
 import { getPaddedNumber } from "@/lib/helpers";
+import { parseClockComment } from "@/lib/chess";
 
 export interface Props {
   player: Player;
@@ -98,16 +99,4 @@ export default function PlayerHeader({ color, player, gameAtom }: Props) {
   );
 }
 
-const getClock = (comment: string | undefined) => {
-  if (!comment) return undefined;
-
-  const match = comment.match(/\[%clk (\d+):(\d+):(\d+)(?:\.(\d*))?\]/);
-  if (!match) return undefined;
-
-  return {
-    hours: parseInt(match[1]),
-    minutes: parseInt(match[2]),
-    seconds: parseInt(match[3]),
-    tenths: match[4] ? parseInt(match[4]) : 0,
-  };
-};
+const getClock = parseClockComment;

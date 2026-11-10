@@ -1,24 +1,25 @@
 import { formatGameToDatabase } from "@/lib/chess";
+import {
+  ChesskitDBInstance,
+  getDb,
+  notifyDbChange,
+  subscribeDbChange,
+} from "@/lib/db";
+import { getMyColor } from "@/lib/gameMeta";
+import { profileAtom } from "@/sections/training/states";
 import { GameEval } from "@/types/eval";
 import { Game } from "@/types/game";
 import { Chess } from "chess.js";
-import { openDB, DBSchema, IDBPDatabase } from "idb";
-import { atom, useAtom } from "jotai";
+import { atom, useAtom, useAtomValue } from "jotai";
 import { useRouter } from "next/router";
 import { useCallback, useEffect, useState } from "react";
-
-interface GameDatabaseSchema extends DBSchema {
-  games: {
-    value: Game;
-    key: number;
-  };
-}
 
 const gamesAtom = atom<Game[]>([]);
 const fetchGamesAtom = atom<boolean>(false);
 
 export const useGameDatabase = (shouldFetchGames?: boolean) => {
-  const [db, setDb] = useState<IDBPDatabase<GameDatabaseSchema> | null>(null);
+  const [db, setDb] = useState<ChesskitDBInstance | null>(null);
+  const profile = useAtomValue(profileAtom);
   const [games, setGames] = useAtom(gamesAtom);
   const [fetchGames, setFetchGames] = useAtom(fetchGamesAtom);
   const [gameFromUrl, setGameFromUrl] = useState<Game | undefined>(undefined);
@@ -30,16 +31,7 @@ export const useGameDatabase = (shouldFetchGames?: boolean) => {
   }, [shouldFetchGames, setFetchGames]);
 
   useEffect(() => {
-    const initDatabase = async () => {
-      const db = await openDB<GameDatabaseSchema>("games", 1, {
-        upgrade(db) {
-          db.createObjectStore("games", { keyPath: "id", autoIncrement: true });
-        },
-      });
-      setDb(db);
-    };
-
-    initDatabase();
+    getDb().then(setDb);
   }, []);
 
   const loadGames = useCallback(async () => {
@@ -53,18 +45,27 @@ export const useGameDatabase = (shouldFetchGames?: boolean) => {
     loadGames();
   }, [loadGames]);
 
+  useEffect(
+    () =>
+      subscribeDbChange((store) => {
+        if (store === "games") loadGames();
+      }),
+    [loadGames]
+  );
+
   const addGame = useCallback(
     async (game: Chess) => {
       if (!db) throw new Error("Database not initialized");
 
       const gameToAdd = formatGameToDatabase(game);
-      const gameId = await db.add("games", gameToAdd as Game);
+      const myColor = getMyColor(gameToAdd, profile);
+      const gameId = await db.add("games", { ...gameToAdd, myColor } as Game);
 
-      loadGames();
+      notifyDbChange("games");
 
       return gameId;
     },
-    [db, loadGames]
+    [db, profile]
   );
 
   const setGameEval = useCallback(
@@ -76,9 +77,9 @@ export const useGameDatabase = (shouldFetchGames?: boolean) => {
 
       await db.put("games", { ...game, eval: evaluation });
 
-      loadGames();
+      notifyDbChange("games");
     },
-    [db, loadGames]
+    [db]
   );
 
   const getGame = useCallback(
@@ -94,11 +95,22 @@ export const useGameDatabase = (shouldFetchGames?: boolean) => {
     async (gameId: number) => {
       if (!db) throw new Error("Database not initialized");
 
-      await db.delete("games", gameId);
+      const tx = db.transaction(["games", "digests", "puzzles"], "readwrite");
+      await tx.objectStore("games").delete(gameId);
+      await tx.objectStore("digests").delete(gameId);
+      const puzzleIds = await tx
+        .objectStore("puzzles")
+        .index("by-gameId")
+        .getAllKeys(gameId);
+      for (const puzzleId of puzzleIds) {
+        await tx.objectStore("puzzles").delete(puzzleId);
+      }
+      await tx.done;
 
-      loadGames();
+      notifyDbChange("games");
+      notifyDbChange("puzzles");
     },
-    [db, loadGames]
+    [db]
   );
 
   const router = useRouter();

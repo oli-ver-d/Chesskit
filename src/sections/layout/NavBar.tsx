@@ -13,6 +13,7 @@ import { styled } from "@mui/material/styles";
 import Tooltip from "@mui/material/Tooltip";
 import { useSetAtom } from "jotai";
 import { coachSettingsOpenAtom } from "@/sections/coach/states";
+import AnalysisIndicator from "@/sections/training/analysisIndicator";
 
 interface Props {
   darkMode: boolean;
@@ -83,6 +84,8 @@ export default function NavBar({ darkMode, switchDarkMode }: Props) {
               Chesskit
             </Typography>
           </NavLink>
+
+          <AnalysisIndicator />
 
           <Tooltip title="AI Coach settings">
             <IconButton

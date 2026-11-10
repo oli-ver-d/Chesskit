@@ -14,6 +14,7 @@ import {
 const MenuOptions = [
   { text: "Play", icon: "streamline:chess-pawn", href: "/play" },
   { text: "Analysis", icon: "streamline:magnifying-glass-solid", href: "/" },
+  { text: "Train", icon: "mdi:target", href: "/train" },
   {
     text: "Database",
     icon: "streamline:database",

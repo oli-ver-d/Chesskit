@@ -1,5 +1,5 @@
 import LoadGameButton from "../../loadGame/loadGameButton";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useChessActions } from "@/hooks/useChessActions";
 import {
   boardAtom,
@@ -14,12 +14,15 @@ import { Chess } from "chess.js";
 import { useRouter } from "next/router";
 import { GameEval } from "@/types/eval";
 import { fetchLichessGame } from "@/lib/lichess";
+import { getGameFromPgn } from "@/lib/chess";
+import { Color } from "@/types/enums";
 
 export default function LoadGame() {
   const router = useRouter();
   const game = useAtomValue(gameAtom);
   const { setPgn: setGamePgn } = useChessActions(gameAtom);
-  const { resetToStartingPosition: resetBoard } = useChessActions(boardAtom);
+  const { resetToStartingPosition: resetBoard, goToMove: goToBoardMove } =
+    useChessActions(boardAtom);
   const { gameFromUrl } = useGameDatabase();
   const setEval = useSetAtom(gameEvalAtom);
   const setBoardOrientation = useSetAtom(boardOrientationAtom);
@@ -41,7 +44,11 @@ export default function LoadGame() {
     [joinedGameHistory, resetBoard, setGamePgn, setEval, setBoardOrientation]
   );
 
-  const { lichessGameId, orientation: orientationParam } = router.query;
+  const {
+    lichessGameId,
+    orientation: orientationParam,
+    ply: plyParam,
+  } = router.query;
 
   useEffect(() => {
     const handleLichess = async (id: string) => {
@@ -52,14 +59,47 @@ export default function LoadGame() {
     };
 
     if (gameFromUrl) {
-      const orientation = !(
-        gameFromUrl.site === "Chesskit.org" && gameFromUrl.black.name === "You"
-      );
+      const orientation = gameFromUrl.myColor
+        ? gameFromUrl.myColor === Color.White
+        : !(
+            gameFromUrl.site === "Chesskit.org" &&
+            gameFromUrl.black.name === "You"
+          );
       resetAndSetGamePgn(gameFromUrl.pgn, orientation, gameFromUrl.eval);
     } else if (typeof lichessGameId === "string" && !!lichessGameId) {
       handleLichess(lichessGameId);
     }
   }, [gameFromUrl, lichessGameId, orientationParam, resetAndSetGamePgn]);
+
+  // `?gameId=X&ply=N` opens the saved game at the position after N half-moves
+  const appliedPlyRef = useRef<string | undefined>(undefined);
+  const gameFromUrlHistory = useMemo(() => {
+    if (!gameFromUrl) return undefined;
+    try {
+      return getGameFromPgn(gameFromUrl.pgn).history().join();
+    } catch {
+      return undefined;
+    }
+  }, [gameFromUrl]);
+
+  useEffect(() => {
+    if (!gameFromUrl || typeof plyParam !== "string") return;
+    const ply = parseInt(plyParam);
+    const key = `${gameFromUrl.id}:${ply}`;
+    if (Number.isNaN(ply) || appliedPlyRef.current === key) return;
+    // Wait until the game from the URL is the one loaded
+    if (joinedGameHistory !== gameFromUrlHistory) return;
+
+    appliedPlyRef.current = key;
+    goToBoardMove(ply, game);
+  }, [
+    gameFromUrl,
+    gameFromUrlHistory,
+    plyParam,
+    joinedGameHistory,
+    game,
+    goToBoardMove,
+  ]);
 
   useEffect(() => {
     const eventHandler = (event: MessageEvent) => {
