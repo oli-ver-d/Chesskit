@@ -1,4 +1,4 @@
-import { useAtom, useAtomValue } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { Move } from "chess.js";
 import { CSSProperties, useEffect, useMemo } from "react";
 import { Arrow } from "react-chessboard/dist/chessboard/types";
@@ -22,6 +22,7 @@ import { shouldBlunderCheck } from "@/lib/training/blunderCheck";
 import { blunderCheckModeAtom } from "@/sections/coach/states";
 import { Color } from "@/types/enums";
 import {
+  betterMovePreviewAtom,
   blunderCheckAtom,
   blunderCheckSkipFenAtom,
   hintArrowsAtom,
@@ -48,6 +49,13 @@ export default function BoardContainer() {
   const blunderCheckMode = useAtomValue(blunderCheckModeAtom);
   const [check, setCheck] = useAtom(blunderCheckAtom);
   const [skipFen, setSkipFen] = useAtom(blunderCheckSkipFenAtom);
+  const preview = useAtomValue(betterMovePreviewAtom);
+  const setShowMoveIcon = useSetAtom(showPlayMoveIconAtom);
+
+  // The move icon marks the latest move, which isn't on the previewed position
+  useEffect(() => {
+    setShowMoveIcon(!preview);
+  }, [preview, setShowMoveIcon]);
 
   const gameFen = game.fen();
   const isGameFinished = game.isGameOver();
@@ -122,15 +130,16 @@ export default function BoardContainer() {
   };
 
   const opponentColor = playerColor === Color.White ? Color.Black : Color.White;
-  const canPlay = !isGameInProgress
-    ? false
-    : !check
-      ? playerColor
-      : check.stage === "reply"
-        ? opponentColor
-        : false;
+  const canPlay =
+    !isGameInProgress || !!preview
+      ? false
+      : !check
+        ? playerColor
+        : check.stage === "reply"
+          ? opponentColor
+          : false;
 
-  let arrows: Arrow[] = hintArrows;
+  let arrows: Arrow[] = preview?.arrows ?? hintArrows;
   let squareStyles: Record<string, CSSProperties> | undefined;
   if (check) {
     arrows = [];
@@ -166,7 +175,7 @@ export default function BoardContainer() {
       extraArrows={arrows}
       customSquareStyles={squareStyles}
       onMoveIntercept={onMoveIntercept}
-      overrideFen={check?.candidate.after}
+      overrideFen={check?.candidate.after ?? preview?.fen}
     />
   );
 }

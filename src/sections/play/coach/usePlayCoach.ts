@@ -1,8 +1,8 @@
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef } from "react";
 import { Move } from "chess.js";
-import { Square } from "react-chessboard/dist/chessboard/types";
-import { DEFAULT_ENGINE } from "@/constants";
+import { Arrow, Square } from "react-chessboard/dist/chessboard/types";
+import { CLASSIFICATION_COLORS, DEFAULT_ENGINE } from "@/constants";
 import { useEngine } from "@/hooks/useEngine";
 import { useChessActions } from "@/hooks/useChessActions";
 import { PositionEval } from "@/types/eval";
@@ -19,6 +19,7 @@ import {
   getNullMoveFen,
   moveLabel,
   pieceOnSquare,
+  pvToSan,
   uciToSan,
   winChanceFor,
 } from "@/lib/coach/facts";
@@ -35,6 +36,8 @@ import {
   playerColorAtom,
 } from "../states";
 import {
+  BetterMove,
+  betterMovePreviewAtom,
   CoachMessage,
   coachMessagesAtom,
   hintArrowsAtom,
@@ -59,6 +62,7 @@ export const usePlayCoach = () => {
   const setMessages = useSetAtom(coachMessagesAtom);
   const setGameData = useSetAtom(gameDataAtom);
   const setHintArrows = useSetAtom(hintArrowsAtom);
+  const [preview, setPreview] = useAtom(betterMovePreviewAtom);
   const [hintLevel, setHintLevel] = useAtom(hintLevelAtom);
   const { goToMove } = useChessActions(gameAtom);
   const engine = useEngine(DEFAULT_ENGINE);
@@ -143,6 +147,19 @@ export const usePlayCoach = () => {
 
       let textKey: string | undefined;
       let text: string | undefined;
+      let betterMove: BetterMove | undefined;
+
+      const bestUci = before.bestMove ?? before.lines[0]?.pv?.[0];
+      const bestSan = uciToSan(move.before, bestUci);
+      if (isBad && bestUci && bestSan && bestUci !== uci) {
+        betterMove = {
+          fen: move.before,
+          san: bestSan,
+          uci: bestUci,
+          line: pvToSan(move.before, before.lines[0]?.pv ?? [bestUci]),
+          playedUci: uci,
+        };
+      }
 
       if (shouldExplain) {
         textKey = `play-move|${move.before}|${uci}`;
@@ -160,22 +177,20 @@ export const usePlayCoach = () => {
             audience: "player",
           })
         );
-      } else if (isBad) {
-        const best = uciToSan(
-          move.before,
-          before.bestMove ?? before.lines[0]?.pv?.[0]
-        );
-        if (best) text = `${best} was better.`;
+      } else if (betterMove) {
+        text = `Engine line: ${betterMove.line}.${
+          hasKey
+            ? ""
+            : " Add an OpenRouter key and I'll explain why it's better."
+        }`;
       }
 
       updateMessage(id, {
         classification,
         textKey,
         text,
-        canTakeback:
-          takebacks &&
-          (classification === MoveClassification.Mistake ||
-            classification === MoveClassification.Blunder),
+        betterMove,
+        canTakeback: takebacks && isBad,
       });
 
       setGameData((prev) =>
@@ -269,6 +284,7 @@ export const usePlayCoach = () => {
       setMessages((prev) =>
         prev.filter((m) => m.ply <= common && sans.length > 0)
       );
+      setPreview(undefined);
     }
     processedRef.current = sans;
 
@@ -309,6 +325,7 @@ export const usePlayCoach = () => {
       (hintLevel.ply === ply ? hintLevel.level : 0) + 1
     );
     setHintLevel({ ply, level });
+    setPreview(undefined);
 
     const { hasKey, ask } = llmRef.current;
     const id = `hint-${ply}-${level}`;
@@ -375,7 +392,35 @@ export const usePlayCoach = () => {
     setMessages,
     updateMessage,
     setHintArrows,
+    setPreview,
   ]);
+
+  /** Shows (or hides) the position before a bad move, with your move and the better one */
+  const toggleBetterMove = useCallback(
+    (message: CoachMessage) => {
+      const better = message.betterMove;
+      if (!better || preview?.messageId === message.id) {
+        setPreview(undefined);
+        return;
+      }
+      const arrow = (uci: string, color: string) =>
+        [uci.slice(0, 2), uci.slice(2, 4), color] as Arrow;
+      setPreview({
+        messageId: message.id,
+        fen: better.fen,
+        arrows: [
+          arrow(
+            better.playedUci,
+            CLASSIFICATION_COLORS[
+              message.classification ?? MoveClassification.Mistake
+            ]
+          ),
+          arrow(better.uci, CLASSIFICATION_COLORS[MoveClassification.Best]),
+        ],
+      });
+    },
+    [preview, setPreview]
+  );
 
   const takeback = useCallback(
     (message: CoachMessage) => {
@@ -393,5 +438,7 @@ export const usePlayCoach = () => {
     hintLevel: currentHintLevel,
     requestHint,
     takeback,
+    previewId: preview?.messageId,
+    toggleBetterMove,
   };
 };

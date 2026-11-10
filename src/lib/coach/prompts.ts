@@ -7,6 +7,7 @@ import {
   colorName,
   describeEval,
   describeMaterial,
+  describeMoveEffects,
   describePawns,
   getGamePhase,
   getHangingPieces,
@@ -95,6 +96,13 @@ const buildMoveFacts = (input: MoveCoachInput): string[] => {
         bestBefore.pv
       )})`
     );
+    facts.push(
+      `Evaluation if ${bestMoveSan} had been played: ${describeEval(bestBefore)}`
+    );
+    const bestEffects = describeMoveEffects(input.fenBefore, bestMoveUci);
+    if (bestEffects.length) {
+      facts.push(`What ${bestMoveSan} does: ${bestEffects.join("; ")}`);
+    }
     const second = input.evalBefore.lines.find(
       (l) => l.pv[0] !== bestMoveUci && l.pv[0] !== input.uci
     );
@@ -137,20 +145,24 @@ const buildMoveFacts = (input: MoveCoachInput): string[] => {
 
 const getTaskForClassification = (
   classification: MoveClassification | undefined,
-  audience: MoveCoachInput["audience"]
+  audience: MoveCoachInput["audience"],
+  bestMoveSan: string | undefined
 ): string => {
   const who =
     audience === "player"
       ? 'Talk directly to the player who made the move ("you").'
       : "Refer to the sides as White and Black.";
+  const better = bestMoveSan ?? "the engine's best move";
+  const whyBest = `Then name ${better} and explain why it is the best move: what it wins, threatens, defends or improves, following the engine line and the facts about what it does.`;
 
   switch (classification) {
     case MoveClassification.Blunder:
     case MoveClassification.Mistake:
-      return `${who} In 1-3 sentences explain what goes wrong after this move (what the opponent's reply exploits) and what the better move would have achieved.`;
+      return `${who} In 2-4 sentences: first explain what goes wrong after this move (what the opponent's best reply exploits). ${whyBest}`;
     case MoveClassification.Inaccuracy:
+      return `${who} In 2-3 sentences: first say briefly why this move is imprecise (what it misses or allows). ${whyBest}`;
     case MoveClassification.Okay:
-      return `${who} In 1-2 sentences explain why this move is a bit imprecise and what the better move does better.`;
+      return `${who} In 1-2 sentences say what this move does, then why ${better} was a bit more precise.`;
     case MoveClassification.Splendid:
     case MoveClassification.Perfect:
       return `${who} In 1-2 enthusiastic sentences explain why this move is so strong.`;
@@ -165,16 +177,26 @@ const getTaskForClassification = (
 
 export const buildMoveExplanationMessages = (
   input: MoveCoachInput
-): ChatMessage[] => [
-  { role: "system", content: SYSTEM_PROMPT },
-  {
-    role: "user",
-    content: `${buildMoveFacts(input).join("\n")}\n\nTask: ${getTaskForClassification(
-      input.classification,
-      input.audience
-    )}`,
-  },
-];
+): ChatMessage[] => {
+  const bestMoveUci =
+    input.evalBefore.bestMove ?? input.evalBefore.lines[0]?.pv?.[0];
+  const bestMoveSan =
+    bestMoveUci !== input.uci
+      ? uciToSan(input.fenBefore, bestMoveUci)
+      : undefined;
+
+  return [
+    { role: "system", content: SYSTEM_PROMPT },
+    {
+      role: "user",
+      content: `${buildMoveFacts(input).join("\n")}\n\nTask: ${getTaskForClassification(
+        input.classification,
+        input.audience,
+        bestMoveSan
+      )}`,
+    },
+  ];
+};
 
 export interface HintInput {
   fen: string;

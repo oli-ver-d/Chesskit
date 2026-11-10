@@ -133,6 +133,41 @@ export const getHangingPieces = (fen: string, color: ChessColor): string[] => {
   return result;
 };
 
+/**
+ * Plain facts about what a move does on the board: captures, checks,
+ * promotions and opponent pieces it leaves under attack.
+ */
+export const describeMoveEffects = (fen: string, uci?: string): string[] => {
+  if (!uci) return [];
+  let move;
+  try {
+    move = new Chess(fen).move(uciMoveParams(uci));
+  } catch {
+    return [];
+  }
+  const opponent: ChessColor = move.color === "w" ? "b" : "w";
+  const effects: string[] = [];
+
+  if (move.captured) {
+    effects.push(`captures a ${PIECE_NAMES[move.captured]} on ${move.to}`);
+  }
+  if (move.promotion) {
+    effects.push(`promotes to a ${PIECE_NAMES[move.promotion]}`);
+  }
+  if (move.san.includes("#")) effects.push("delivers checkmate");
+  else if (move.san.includes("+")) effects.push("gives check");
+
+  const targetsBefore = new Set(getHangingPieces(fen, opponent));
+  const newTargets = getHangingPieces(move.after, opponent).filter(
+    (target) => !targetsBefore.has(target)
+  );
+  if (newTargets.length) {
+    effects.push(`leaves the opponent's ${newTargets.join(", ")} under attack`);
+  }
+
+  return effects;
+};
+
 /** Material balance in pawns from White's point of view. */
 export const getMaterialBalance = (fen: string): number => {
   const board = fen.split(" ")[0];

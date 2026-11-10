@@ -16,8 +16,10 @@ idea.
 
 ## Game review (Analysis page)
 
-- After **Analyze**, a coach bubble under the move info explains the current move
-  (blunders: what the reply exploits and what was better; good moves: the idea).
+- After **Analyze**, a coach bubble under the move info explains the current move.
+  On inaccuracies, mistakes and blunders it says what the move missed or allowed,
+  then names the best move and explains why it's best. On good moves it explains
+  the idea.
 - Moves are explained automatically as you step through (debounced). You can turn
   this off in the coach settings and use the **Explain this move** button instead.
 - **AI game summary** writes a short game review: overview, key moments and what
@@ -28,7 +30,10 @@ idea.
 
 - Every one of your moves is graded by Stockfish and shown on the board and in the
   coach feed.
-- **Take back & retry** appears on mistakes and blunders.
+- On an inaccuracy, mistake or blunder the coach shows the better move, explains
+  why it's better, and offers **Show better move**. That button shows the position
+  before your move, with arrows for your move and the engine's.
+- **Take back & retry** appears on inaccuracies, mistakes and blunders.
 - **Hint** → **Bigger hint** → **Show best move**: two AI nudges, then an arrow
   showing the move.
 - Bot moves are explained, and the coach warns you when the bot creates a threat

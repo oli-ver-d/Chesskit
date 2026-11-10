@@ -18,10 +18,26 @@ export interface CoachMessage {
   /** Static text (no AI) */
   text?: string;
   canTakeback?: boolean;
+  /** On your inaccuracies, mistakes and blunders: the move the engine preferred */
+  betterMove?: BetterMove;
+}
+
+export interface BetterMove {
+  /** Position before your move */
+  fen: string;
+  san: string;
+  uci: string;
+  /** Engine line starting with the better move, numbered SAN */
+  line: string;
+  playedUci: string;
 }
 
 export const coachMessagesAtom = atom<CoachMessage[]>([]);
 export const hintArrowsAtom = atom<Arrow[]>([]);
+/** "Show better move": the board shows the position before your move with arrows */
+export const betterMovePreviewAtom = atom<
+  { messageId: string; fen: string; arrows: Arrow[] } | undefined
+>(undefined);
 export const hintLevelAtom = atom<{ ply: number; level: number }>({
   ply: -1,
   level: 0,
