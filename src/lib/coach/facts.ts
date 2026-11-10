@@ -153,6 +153,19 @@ export const describeMaterial = (fen: string): string => {
   } of material`;
 };
 
+/** "White pawns: a2, b2, d4; Black pawns: a7, c5" */
+export const describePawns = (fen: string): string => {
+  const pawns: Record<ChessColor, string[]> = { w: [], b: [] };
+  for (const row of new Chess(fen).board()) {
+    for (const piece of row) {
+      if (piece?.type === "p") pawns[piece.color].push(piece.square);
+    }
+  }
+  const list = (color: ChessColor) =>
+    `${colorName(color)} pawns: ${pawns[color].sort().join(", ") || "none"}`;
+  return `${list("w")}; ${list("b")}`;
+};
+
 export const getGamePhase = (fen: string, plyIndex: number): string => {
   const board = fen.split(" ")[0];
   const heavy = (board.match(/[qrbnQRBN]/g) ?? []).length;

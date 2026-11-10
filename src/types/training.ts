@@ -48,8 +48,6 @@ export interface GameDigest {
   openingName?: string;
   timeClass?: string;
   moves: MoveDigest[];
-  /** First ply where you left your opening repertoire (opening trainer) */
-  leftRepertoireAtPly?: number;
 }
 
 export type PuzzleTheme =
@@ -92,19 +90,30 @@ export interface Puzzle {
   lastResult?: PuzzleResult;
 }
 
+/**
+ * What's stored for one position of your opening repertoire where you move:
+ * your own edits and its review schedule. The repertoire itself (which moves
+ * you play, how often) is rebuilt from your digests, so new games never
+ * overwrite these.
+ */
 export interface RepertoireNode {
   /** `${color}:${fenKey}` */
   id: string;
+  /** Your colour in this repertoire */
   color: Color;
   fenKey: string;
-  /** Move (UCI) you should play here */
-  moveUci?: string;
-  /** Move counts from your games: UCI → count */
-  seen: Record<string, number>;
-  corrected?: boolean;
-  pinned?: boolean;
+  /** Move you chose to play here, instead of the one picked from your games */
+  pinnedUci?: string;
+  /** Other moves you accept here (added during a drill) */
+  extraUci?: string[];
+  /** Left out of drills, along with the positions after it */
+  excluded?: boolean;
+  /** Leitner box: 0 = never drilled */
   box: number;
   dueAt: number;
+  attempts: number;
+  lastAttemptAt?: number;
+  lastResult?: PuzzleResult;
 }
 
 export type TrainingLogKind = "puzzle" | "opening" | "blunder-check";

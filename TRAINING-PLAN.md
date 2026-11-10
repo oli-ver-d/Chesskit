@@ -77,7 +77,7 @@ Bump `openDB("games", 2, { upgrade(db, oldVersion, _, tx) })` and branch on `old
     missedMate?: boolean;                      // best line had mate, played move didn't
     opponentErredPrev?: boolean;               // prev opponent move was mistake/blunder ("missed chance")
   }
-  interface GameDigest { gameId; version; myColor; accuracy; openingName?; moves: MoveDigest[]; leftRepertoireAtPly?: number }
+  interface GameDigest { gameId; version; myColor; accuracy; openingName?; moves: MoveDigest[] }
   ```
   Store a `version` so a change to digest logic re-derives digests without re-running the engine.
 
@@ -171,7 +171,18 @@ The queue order is due puzzles (oldest due first), then new puzzles (newest game
 
 ---
 
-## 5. Weakness report (milestone 3)
+## 5. Weakness report (milestone 3): DONE
+
+> **Status (2026-11-10):** built and tested in the browser on real chess.com games. Where it differs from the plan below:
+> - `computeInsights` (`lib/training/insights.ts`) reads digests, puzzles and the puzzle attempts in `trainingLog`. Rule thresholds live in `INSIGHT_THRESHOLDS` (`lib/training/thresholds.ts`).
+> - Segments are compared with **the rest of your games**, not with an overall baseline that includes the segment itself. That makes small segments stand out more cleanly.
+> - Rules built: `phaseBlunders`, `lateGameDrop` (moves 31+ vs 11–30), `openingScore` (family × colour, ≥ 6 games, ≥ 15 pts below your score), `segmentAccuracy` (colour and time class, game accuracy ≥ 5 pts below the rest), `conversion` (score from positions where your win chance reached 80%, flagged under 70%), `timeTrouble` (blunders under 30 s, or else under 60 s, vs 60 s or more; the clock is your previous move's `[%clk]`; daily and correspondence games are left out), `theme` (your most common puzzle theme, ≥ 30% of puzzles) and `themeSolve` (a theme solved ≥ 20 pts less often than your puzzles overall).
+> - Ranking: effect size (0.5 at the rule's threshold) × confidence `n / (n + minSample)`. Severity is shown as "Big / Clear / Small effect".
+> - Phase and move-bucket accuracy are per-move averages of the lichess move-accuracy formula. Colour, time class and opening accuracy are averages of game accuracy.
+> - "Train these" puts the finding's puzzles in `puzzleSetAtom` and opens Train → Puzzles, which drills that set whether or not the puzzles are due. Attempts are scheduled as usual.
+> - Charts: win chance lost per move by move number, and score by opening (Recharts, one series, dataviz palette slot 1). The phase, colour/time-class, clock and theme stats are tables.
+> - "Coach's read" is `buildWeaknessReportMessages`, cached under a key built from the findings' ids and numbers.
+> - Not built: blunder-check results (they need milestone 5).
 
 ### Stats (`lib/training/insights.ts`, pure, over all digests where `myColor` is set)
 Each stat is split by segment:
@@ -199,7 +210,17 @@ The evidence for each finding is its worst 5–10 positions. They link to `/?gam
 
 ---
 
-## 6. Opening trainer (milestone 4)
+## 6. Opening trainer (milestone 4): DONE
+
+> **Status (2026-11-10):** built and tested in the browser on real chess.com games. Where it differs from the plan below:
+> - The tree isn't stored. `buildRepertoire` (`lib/training/repertoire.ts`) rebuilds it in memory from all digests, like Insights. The `repertoire` store keeps only your edits and the schedule per position where you move: `pinnedUci`, `extraUci` (accepted alternatives), `excluded` (cut the line), Leitner `box`/`dueAt`. So new games can never overwrite a pinned move.
+> - Thresholds live in `REPERTOIRE_THRESHOLDS`: the first 16 plies, a position or opponent reply needs 2 games, and your usual move is replaced by the engine's best when it loses ≥ 8 win% on average. A corrected or pinned move you never played ends the line there, because your games don't show what comes after it.
+> - Lines are grouped by the opening family each line *ends* in (names from `data/openings.ts`, matched on the board), and a line's drill starts where that name first appears. Grouping by each position's own name split the Italian Game into "King's Pawn Game" and "King's Knight Opening" fragments.
+> - The drill: the opponent's replies are weighted by how often you face them, among the replies that lead to positions still due; then among replies that stay in the chosen line. Each position is graded once per session with the puzzle scheduler (`schedulePuzzle`): right first time = clean; a move outside the repertoire that the engine (depth 14, both moves checked live) rates within 3% = "Add to my repertoire" (clean, saved to `extraUci`) or "Keep" (hinted); anything else = failed, and you must play the repertoire move to go on. Attempts are logged to `trainingLog` as kind "opening".
+> - The coach's plan is `buildOpeningPlanMessages`, asked automatically on a wrong move when a key is set. Its facts include the pawn structure (`describePawns`). Without a key the drill shows the repertoire move, why it's the repertoire move, the engine line and the refutation.
+> - Each position can be edited from its line: play another of your moves or the engine's move there (resets its schedule), go back to the automatic choice, stop accepting an added move, or stop drilling it (and the positions after it).
+> - `leftRepertoireAtPly` isn't stored on digests: it would depend on every other game. `findRepertoireExit` computes it, and the Openings tab lists "Where you left your repertoire" with links to the game. Not built: showing it in the Analysis page's game review and in Insights.
+> - Not built: the lichess opening explorer suggestions (optional).
 
 ### Building the repertoire (`lib/training/repertoire.ts`, pure)
 - For each colour, walk your games' first 16 plies (configurable) into a tree keyed by `fenKey` (FEN without the move counters).

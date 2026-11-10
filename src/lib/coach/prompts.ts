@@ -1,3 +1,5 @@
+import { Chess } from "chess.js";
+import { uciMoveParams } from "@/lib/chess";
 import { MoveClassification } from "@/types/enums";
 import { PositionEval } from "@/types/eval";
 import { ChatMessage } from "./openrouter";
@@ -5,6 +7,7 @@ import {
   colorName,
   describeEval,
   describeMaterial,
+  describePawns,
   getGamePhase,
   getHangingPieces,
   moveLabel,
@@ -409,5 +412,162 @@ export const buildPuzzleCoachMessages = (
   return [
     { role: "system", content: SYSTEM_PROMPT },
     { role: "user", content: `${facts.join("\n")}\n\nTask: ${task}` },
+  ];
+};
+
+export interface WeaknessReportInput {
+  games: number;
+  score: number;
+  accuracy?: number;
+  /** Phase lines such as "middlegame: 3.1 blunders per 100 moves, accuracy 78%" */
+  phases: string[];
+  findings: { title: string; detail: string; severity: string }[];
+}
+
+export const buildWeaknessReportMessages = (
+  input: WeaknessReportInput
+): ChatMessage[] => {
+  const facts = [
+    `These statistics come from the engine analysis of ${input.games} of the player's own games.`,
+    `Overall score: ${Math.round(input.score)}%${
+      input.accuracy !== undefined
+        ? `, average accuracy ${Math.round(input.accuracy)}%`
+        : ""
+    }.`,
+    "By game phase:",
+    ...input.phases.map((line) => `- ${line}`),
+    "",
+    "Findings (computed from the games, most important first):",
+    ...(input.findings.length
+      ? input.findings.map((f) => `- [${f.severity}] ${f.title}. ${f.detail}`)
+      : ["- No clear weakness stands out yet."]),
+  ];
+
+  return [
+    { role: "system", content: SYSTEM_PROMPT },
+    {
+      role: "user",
+      content: `${facts.join("\n")}
+
+Task: Talking to the player as "you", turn these findings into a short study plan (Markdown).
+Start with 1-2 sentences on the biggest pattern. Then **This week** followed by 2-4 bullet points of specific practice, each tied to one finding above.
+Use only the numbers given here; don't invent statistics, openings or games. The app has a puzzle trainer built from the player's own mistakes ("Train → Puzzles"), and each finding has a "Train these" button that drills its positions, so suggest those where they fit. Keep it under 180 words.`,
+    },
+  ];
+};
+
+export interface OpeningPlanInput {
+  /** Position before the player's move, the player to move */
+  fen: string;
+  openingName?: string;
+  /** Moves from the start position to `fen`, numbered ("1. e4 e5 2. Nf3") */
+  movesSoFar: string;
+  /** The repertoire move, and the engine's line after it */
+  correctUci: string;
+  correctLine?: string[];
+  /** Why it's the repertoire move */
+  source: "played" | "corrected" | "pinned";
+  /** The player's usual move here, when the repertoire uses another one */
+  usualSan?: string;
+  /** The move the player tried in the drill, and the engine's reply to it */
+  playedUci: string;
+  refutation?: string[];
+  /** Win chance (0-100) for the player after each move, from the engine */
+  correctWin?: number;
+  playedWin?: number;
+}
+
+const describeGap = (gap: number) =>
+  gap >= 20
+    ? "much worse (it throws away a large part of the advantage or the game)"
+    : gap >= 10
+      ? "clearly worse"
+      : "a bit worse";
+
+export const buildOpeningPlanMessages = (
+  input: OpeningPlanInput
+): ChatMessage[] => {
+  const player = input.fen.split(" ")[1] as "w" | "b";
+  const opponent = player === "w" ? "b" : "w";
+  const correctSan = uciToSan(input.fen, input.correctUci) ?? input.correctUci;
+  const playedSan = uciToSan(input.fen, input.playedUci) ?? input.playedUci;
+
+  const afterCorrect = (() => {
+    try {
+      return new Chess(input.fen).move(uciMoveParams(input.correctUci)).after;
+    } catch {
+      return undefined;
+    }
+  })();
+  const afterPlayed = (() => {
+    try {
+      return new Chess(input.fen).move(uciMoveParams(input.playedUci)).after;
+    } catch {
+      return undefined;
+    }
+  })();
+
+  const facts = [
+    `This is an opening drill from the player's own repertoire, built from their games. The player is ${colorName(player)}.`,
+    input.openingName
+      ? `Opening (from an opening database): ${input.openingName}`
+      : "The opening has no name in the database.",
+    `Moves so far: ${input.movesSoFar || "none (starting position)"}`,
+    `Position (FEN): ${input.fen}`,
+    `Repertoire move: ${correctSan}${
+      input.source === "corrected"
+        ? ` (the engine's choice; in their games the player usually played ${input.usualSan ?? "another move"} here, which loses a lot)`
+        : input.source === "pinned"
+          ? " (chosen by the player)"
+          : " (the move the player usually plays here)"
+    }`,
+  ];
+  if (input.correctLine?.length) {
+    facts.push(
+      `Engine line with the repertoire move: ${pvToSan(input.fen, [
+        input.correctUci,
+        ...input.correctLine,
+      ])}`
+    );
+  }
+  if (afterCorrect) {
+    facts.push(`Pawns after ${correctSan}: ${describePawns(afterCorrect)}`);
+  }
+  facts.push(`In the drill the player played ${playedSan} instead.`);
+  if (afterPlayed && input.refutation?.length) {
+    facts.push(
+      `${colorName(opponent)}'s best reply to ${playedSan} and continuation: ${pvToSan(
+        afterPlayed,
+        input.refutation
+      )}`
+    );
+  }
+  if (input.correctWin !== undefined && input.playedWin !== undefined) {
+    const gap = input.correctWin - input.playedWin;
+    facts.push(
+      gap > 0
+        ? `The engine rates ${playedSan} ${describeGap(gap)} than ${correctSan}.`
+        : `The engine rates ${playedSan} about as good as ${correctSan}.`
+    );
+  }
+  if (afterPlayed) {
+    const hanging = getHangingPieces(afterPlayed, player);
+    if (hanging.length) {
+      facts.push(
+        `Player's pieces left en prise after ${playedSan}: ${hanging.join(", ")}`
+      );
+    }
+    facts.push(`Material after ${playedSan}: ${describeMaterial(afterPlayed)}`);
+  }
+
+  return [
+    { role: "system", content: SYSTEM_PROMPT },
+    {
+      role: "user",
+      content: `${facts.join("\n")}
+
+Task: Talking to the player as "you", explain in 2-4 short sentences the plan or idea behind ${correctSan} in this opening, then what goes wrong with ${playedSan} (use the engine's reply).
+You may use general opening knowledge here (typical plans, pawn breaks, where the pieces go), but every claim must agree with the engine lines and the pawn structure given. Don't name other variations or quote theory you aren't sure of; if the plan isn't clear from the data, say so plainly and keep it general.`,
+    },
   ];
 };

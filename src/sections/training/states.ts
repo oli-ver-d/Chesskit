@@ -64,3 +64,11 @@ export const chessComSyncStatusAtom = atom<ChessComSyncStatus>({
 
 /** Incremented by "Sync now" buttons */
 export const chessComSyncRequestAtom = atom(0);
+
+/** A puzzle set to drill, from an Insights finding's "Train these" */
+export interface PuzzleSet {
+  label: string;
+  ids: string[];
+}
+
+export const puzzleSetAtom = atom<PuzzleSet | undefined>(undefined);
