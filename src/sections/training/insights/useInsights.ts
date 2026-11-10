@@ -12,12 +12,15 @@ export const useInsights = (): Insights | undefined => {
 
   const load = useCallback(async () => {
     const db = await getDb();
-    const [digests, puzzles, log] = await Promise.all([
+    const [digests, puzzles, puzzleLog, checkLog] = await Promise.all([
       db.getAll("digests"),
       db.getAll("puzzles"),
       db.getAllFromIndex("trainingLog", "by-kind", "puzzle"),
+      db.getAllFromIndex("trainingLog", "by-kind", "blunder-check"),
     ]);
-    setInsights(computeInsights({ digests, puzzles, log }));
+    setInsights(
+      computeInsights({ digests, puzzles, log: [...puzzleLog, ...checkLog] })
+    );
   }, []);
 
   useEffect(() => {

@@ -19,7 +19,8 @@ import {
   useState,
 } from "react";
 import { Color, MoveClassification } from "@/types/enums";
-import { Chess } from "chess.js";
+import { Chess, Move } from "chess.js";
+import { playIllegalMoveSound, playSoundFromMove } from "@/lib/sounds";
 import { getSquareRenderer } from "./squareRenderer";
 import { CurrentPosition } from "@/types/eval";
 import EvaluationBar from "./evaluationBar";
@@ -44,6 +45,17 @@ export interface Props {
   extraArrows?: Arrow[];
   /** Extra styles per square, e.g. a hint highlight */
   customSquareStyles?: Record<string, CSSProperties>;
+  /**
+   * Called with every legal move made on the board (drop, click or
+   * promotion) before it's played. Return true to handle it yourself: the
+   * move is then not played into `gameAtom`.
+   */
+  onMoveIntercept?: (move: Move) => boolean;
+  /**
+   * Show this position instead of the game's, e.g. a move that isn't played
+   * yet. Moves made on it are only passed to `onMoveIntercept`.
+   */
+  overrideFen?: string;
 }
 
 export default function Board({
@@ -60,6 +72,8 @@ export default function Board({
   showEvaluationBar = false,
   extraArrows,
   customSquareStyles,
+  onMoveIntercept,
+  overrideFen,
 }: Props) {
   const boardRef = useRef<HTMLDivElement>(null);
   const game = useAtomValue(gameAtom);
@@ -75,7 +89,12 @@ export default function Board({
   const pieceSet = useAtomValue(pieceSetAtom);
   const boardHue = useAtomValue(boardHueAtom);
 
-  const gameFen = game.fen();
+  const gameFen = overrideFen ?? game.fen();
+  /** The position shown and played on: the game, or `overrideFen` */
+  const boardGame = useMemo(
+    () => (overrideFen ? new Chess(overrideFen) : game),
+    [overrideFen, game]
+  );
 
   useEffect(() => {
     setClickedSquares([]);
@@ -83,18 +102,40 @@ export default function Board({
 
   const isPiecePlayable = useCallback(
     ({ piece }: { piece: string }): boolean => {
-      if (game.isGameOver() || !canPlay) return false;
+      if (boardGame.isGameOver() || !canPlay) return false;
       if (canPlay === true || canPlay === piece[0]) return true;
       return false;
     },
-    [canPlay, game]
+    [canPlay, boardGame]
+  );
+
+  /** Plays a move, unless `onMoveIntercept` takes it */
+  const tryMove = useCallback(
+    (params: { from: string; to: string; promotion?: string }) => {
+      if (!onMoveIntercept && !overrideFen) return playMove(params);
+
+      let move: Move;
+      try {
+        move = new Chess(boardGame.fen()).move(params);
+      } catch {
+        playIllegalMoveSound();
+        return null;
+      }
+      if (onMoveIntercept?.(move)) {
+        playSoundFromMove(move);
+        return move;
+      }
+      // A position that isn't the game's can't be played into it
+      return overrideFen ? null : playMove(params);
+    },
+    [onMoveIntercept, overrideFen, boardGame, playMove]
   );
 
   const onPieceDrop = useCallback(
     (source: Square, target: Square, piece: string): boolean => {
       if (!isPiecePlayable({ piece })) return false;
 
-      const result = playMove({
+      const result = tryMove({
         from: source,
         to: target,
         promotion: piece[1]?.toLowerCase() ?? "q",
@@ -102,7 +143,7 @@ export default function Board({
 
       return !!result;
     },
-    [isPiecePlayable, playMove]
+    [isPiecePlayable, tryMove]
   );
 
   const resetMoveClick = useCallback(
@@ -111,13 +152,13 @@ export default function Board({
       setMoveClickTo(null);
       setShowPromotionDialog(false);
       if (square) {
-        const moves = game.moves({ square, verbose: true });
+        const moves = boardGame.moves({ square, verbose: true });
         setPlayableSquares(moves.map((m) => m.to));
       } else {
         setPlayableSquares([]);
       }
     },
-    [setMoveClickFrom, setMoveClickTo, setPlayableSquares, game]
+    [setMoveClickFrom, setMoveClickTo, setPlayableSquares, boardGame]
   );
 
   const handleSquareLeftClick = useCallback(
@@ -130,7 +171,10 @@ export default function Board({
         return;
       }
 
-      const validMoves = game.moves({ square: moveClickFrom, verbose: true });
+      const validMoves = boardGame.moves({
+        square: moveClickFrom,
+        verbose: true,
+      });
       const move = validMoves.find((m) => m.to === square);
 
       if (!move) {
@@ -149,7 +193,7 @@ export default function Board({
         return;
       }
 
-      const result = playMove({
+      const result = tryMove({
         from: moveClickFrom,
         to: square,
       });
@@ -157,10 +201,10 @@ export default function Board({
       resetMoveClick(result ? undefined : square);
     },
     [
-      game,
+      boardGame,
       isPiecePlayable,
       moveClickFrom,
-      playMove,
+      tryMove,
       resetMoveClick,
       setClickedSquares,
     ]
@@ -194,7 +238,7 @@ export default function Board({
       const promotionPiece = piece[1]?.toLowerCase() ?? "q";
 
       if (moveClickFrom && moveClickTo) {
-        const result = playMove({
+        const result = tryMove({
           from: moveClickFrom,
           to: moveClickTo,
           promotion: promotionPiece,
@@ -204,7 +248,7 @@ export default function Board({
       }
 
       if (from && to) {
-        const result = playMove({
+        const result = tryMove({
           from,
           to,
           promotion: promotionPiece,
@@ -216,7 +260,7 @@ export default function Board({
       resetMoveClick(moveClickFrom);
       return false;
     },
-    [moveClickFrom, moveClickTo, playMove, resetMoveClick]
+    [moveClickFrom, moveClickTo, tryMove, resetMoveClick]
   );
 
   const customArrows: Arrow[] = useMemo(() => {

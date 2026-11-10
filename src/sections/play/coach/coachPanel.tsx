@@ -10,6 +10,8 @@ import {
   MenuItem,
   Stack,
   Switch,
+  ToggleButton,
+  ToggleButtonGroup,
   Tooltip,
   Typography,
 } from "@mui/material";
@@ -20,7 +22,9 @@ import CoachBubble, {
   CLASSIFICATION_LABELS,
 } from "@/sections/coach/coachBubble";
 import { useCoachLLM } from "@/sections/coach/useCoachLLM";
+import { BlunderCheckMode } from "@/lib/training/blunderCheck";
 import {
+  blunderCheckModeAtom,
   CoachVerbosity,
   playCoachEnabledAtom,
   playCoachTakebacksAtom,
@@ -28,6 +32,8 @@ import {
 } from "@/sections/coach/states";
 import { coachMessagesAtom, CoachMessage } from "./states";
 import { usePlayCoach } from "./usePlayCoach";
+import { useBlunderCheck } from "./useBlunderCheck";
+import BlunderCheckPanel from "./blunderCheckPanel";
 import { gameAtom, isGameInProgressAtom } from "../states";
 
 const VERBOSITY_OPTIONS: {
@@ -50,6 +56,20 @@ const VERBOSITY_OPTIONS: {
 
 const HINT_LABELS = ["Hint", "Bigger hint", "Show best move"];
 
+const BLUNDER_CHECK_OPTIONS: {
+  value: BlunderCheckMode;
+  label: string;
+  help: string;
+}[] = [
+  { value: "off", label: "Off", help: "Moves are played straight away" },
+  {
+    value: "smart",
+    label: "Smart",
+    help: "In sharp positions (checks and captures in the air) and on some quiet moves",
+  },
+  { value: "every", label: "Every move", help: "Outside opening theory" },
+];
+
 export default function CoachPanel() {
   const [enabled, setEnabled] = useAtom(playCoachEnabledAtom);
   const [verbosity, setVerbosity] = useAtom(playCoachVerbosityAtom);
@@ -58,8 +78,10 @@ export default function CoachPanel() {
   const isGameInProgress = useAtomValue(isGameInProgressAtom);
   const game = useAtomValue(gameAtom);
   const { get, hasKey, openSettings } = useCoachLLM();
-  const { canHint, hintLevel, requestHint, takeback, engineReady } =
+  const { canHint, hintLevel, requestHint, takeback, engineReady, getEval } =
     usePlayCoach();
+  const [blunderCheckMode, setBlunderCheckMode] = useAtom(blunderCheckModeAtom);
+  const { check, confirm, change, skip } = useBlunderCheck(getEval);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -179,6 +201,49 @@ export default function CoachPanel() {
         </MenuItem>
       </Menu>
 
+      <Stack
+        direction="row"
+        alignItems="center"
+        justifyContent="space-between"
+        gap={1}
+        flexWrap="wrap"
+      >
+        <Tooltip title="Before your move is played, find your opponent's best reply">
+          <Stack direction="row" alignItems="center" spacing={0.5}>
+            <Icon icon="mdi:shield-search" height={18} />
+            <Typography variant="body2">Blunder check</Typography>
+          </Stack>
+        </Tooltip>
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          value={blunderCheckMode}
+          onChange={(_, value: BlunderCheckMode | null) =>
+            value && setBlunderCheckMode(value)
+          }
+        >
+          {BLUNDER_CHECK_OPTIONS.map((option) => (
+            <Tooltip key={option.value} title={option.help}>
+              <ToggleButton
+                value={option.value}
+                sx={{ py: 0.25, textTransform: "none" }}
+              >
+                {option.label}
+              </ToggleButton>
+            </Tooltip>
+          ))}
+        </ToggleButtonGroup>
+      </Stack>
+
+      {check && (
+        <BlunderCheckPanel
+          check={check}
+          confirm={confirm}
+          change={change}
+          skip={skip}
+        />
+      )}
+
       {enabled && (
         <>
           <Box
@@ -218,7 +283,7 @@ export default function CoachPanel() {
             </Stack>
           </Box>
 
-          {isGameInProgress && hintLevel < 3 && (
+          {isGameInProgress && hintLevel < 3 && !check && (
             <Stack direction="row" spacing={1} justifyContent="center">
               <Button
                 variant="outlined"

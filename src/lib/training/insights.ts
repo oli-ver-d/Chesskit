@@ -7,6 +7,7 @@ import {
   PuzzleTheme,
   TrainingLogEntry,
 } from "@/types/training";
+import { BlunderCheckSummary, summarizeBlunderChecks } from "./blunderCheck";
 import { getPuzzleId } from "./puzzles";
 import { INSIGHT_THRESHOLDS } from "./thresholds";
 
@@ -132,14 +133,18 @@ export interface Insights {
   themes: ThemeInsight[];
   /** Overall puzzle solve rate, if you've attempted any */
   puzzleSolveRate?: number;
+  /** Blunder checks in play mode */
+  blunderChecks: BlunderCheckSummary;
   findings: Finding[];
 }
 
 export interface InsightsInput {
   digests: GameDigest[];
   puzzles: Puzzle[];
-  /** Training log entries; only puzzle attempts are used */
+  /** Training log entries: puzzle attempts and blunder checks are used */
   log?: TrainingLogEntry[];
+  /** For "this week" counts */
+  now?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -745,6 +750,7 @@ export const computeInsights = ({
   digests,
   puzzles,
   log = [],
+  now = Date.now(),
 }: InsightsInput): Insights => {
   const samples = collectMoves(digests);
   const overall = { ...moveStats(samples), ...gameStats(digests) };
@@ -871,6 +877,7 @@ export const computeInsights = ({
       ? (attempts.filter((entry) => entry.success).length / attempts.length) *
         100
       : undefined,
+    blunderChecks: summarizeBlunderChecks(log, now),
   };
 
   const context: RuleContext = {

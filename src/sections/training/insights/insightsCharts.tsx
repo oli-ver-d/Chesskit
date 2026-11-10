@@ -23,7 +23,9 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { BlunderCheckSummary } from "@/lib/training/blunderCheck";
 import { Insights, THEME_NAMES } from "@/lib/training/insights";
+import { BLUNDER_CHECK_THRESHOLDS } from "@/lib/training/thresholds";
 import { Color } from "@/types/enums";
 
 /** dataviz reference palette, categorical slot 1, stepped per mode */
@@ -296,6 +298,33 @@ function OpeningChart({ insights }: { insights: Insights }) {
   );
 }
 
+const checksText = (n: number) => `${n} check${n === 1 ? "" : "s"}`;
+
+function BlunderChecks({ summary }: { summary: BlunderCheckSummary }) {
+  const found = `You found your opponent's best reply in ${summary.correct} of ${checksText(summary.checks)} (${pct(summary.foundRate)})${
+    summary.partial
+      ? `, and one of the engine's top replies in ${summary.partial} more`
+      : ""
+  }.`;
+  const bad = `In ${checksText(summary.badCandidates)}, the move you were about to play lost ${BLUNDER_CHECK_THRESHOLDS.badLoss}% win chance or more to that reply. You changed it ${summary.saved} of those times (${summary.savedThisWeek} this week)${
+    summary.badKept ? ` and played it anyway ${summary.badKept}` : ""
+  }.`;
+
+  return (
+    <Section
+      title="Blunder checks"
+      subtitle="From Play: before your move, you looked for your opponent's best reply."
+    >
+      <Stack gap={1}>
+        <Typography variant="body2">{found}</Typography>
+        {summary.badCandidates > 0 && (
+          <Typography variant="body2">{bad}</Typography>
+        )}
+      </Stack>
+    </Section>
+  );
+}
+
 /** Charts and tables behind the findings */
 export default function InsightsCharts({ insights }: { insights: Insights }) {
   const segments = [
@@ -375,6 +404,10 @@ export default function InsightsCharts({ insights }: { insights: Insights }) {
             ])}
           />
         </Section>
+      )}
+
+      {insights.blunderChecks.checks > 0 && (
+        <BlunderChecks summary={insights.blunderChecks} />
       )}
 
       {themes.length > 0 && (

@@ -1,5 +1,6 @@
 import { atom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
+import { BlunderCheckMode } from "@/lib/training/blunderCheck";
 
 export const DEFAULT_COACH_MODEL = "google/gemini-2.5-flash";
 
@@ -29,6 +30,12 @@ export const playCoachVerbosityAtom = atomWithStorage<CoachVerbosity>(
 export const playCoachTakebacksAtom = atomWithStorage<boolean>(
   "aiCoachPlayTakebacks",
   true
+);
+
+/** Play: stop before your move and ask for the opponent's best reply */
+export const blunderCheckModeAtom = atomWithStorage<BlunderCheckMode>(
+  "blunderCheckMode",
+  "off"
 );
 
 export interface CoachText {

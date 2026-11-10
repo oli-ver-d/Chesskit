@@ -1,5 +1,7 @@
+import { Move } from "chess.js";
 import { atom } from "jotai";
 import { Arrow } from "react-chessboard/dist/chessboard/types";
+import { BlunderCheckGrade } from "@/lib/training/blunderCheck";
 import { MoveClassification } from "@/types/enums";
 
 export type CoachMessageKind = "player" | "bot" | "hint" | "info";
@@ -25,3 +27,32 @@ export const hintLevelAtom = atom<{ ply: number; level: number }>({
   level: 0,
 });
 export const showPlayMoveIconAtom = atom(true);
+
+export interface BlunderCheckResult {
+  grade: BlunderCheckGrade;
+  /** Engine's best line for the opponent after your candidate move */
+  bestLine: string[];
+  /** Win chance your candidate loses against the best reply */
+  candidateLoss: number;
+  candidateWasBad: boolean;
+  /** Key in the LLM cache for the coach's explanation, if any */
+  textKey?: string;
+}
+
+/**
+ * A blunder check in progress: your move is staged (shown, not played)
+ * while you find the opponent's best reply, then graded.
+ */
+export type BlunderCheck =
+  | { stage: "reply"; candidate: Move }
+  | { stage: "grading"; candidate: Move; answer: Move }
+  | {
+      stage: "result";
+      candidate: Move;
+      answer: Move;
+      result?: BlunderCheckResult;
+    };
+
+export const blunderCheckAtom = atom<BlunderCheck | undefined>(undefined);
+/** Position where you changed your move after a check: the next move there isn't checked */
+export const blunderCheckSkipFenAtom = atom<string | undefined>(undefined);

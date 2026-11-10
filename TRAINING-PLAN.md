@@ -182,7 +182,7 @@ The queue order is due puzzles (oldest due first), then new puzzles (newest game
 > - "Train these" puts the finding's puzzles in `puzzleSetAtom` and opens Train → Puzzles, which drills that set whether or not the puzzles are due. Attempts are scheduled as usual.
 > - Charts: win chance lost per move by move number, and score by opening (Recharts, one series, dataviz palette slot 1). The phase, colour/time-class, clock and theme stats are tables.
 > - "Coach's read" is `buildWeaknessReportMessages`, cached under a key built from the findings' ids and numbers.
-> - Not built: blunder-check results (they need milestone 5).
+> - Blunder-check results (milestone 5) show as a "Blunder checks" section under The numbers, and go into the coach's read. They aren't a finding: there's no segment to compare them with.
 
 ### Stats (`lib/training/insights.ts`, pure, over all digests where `myColor` is set)
 Each stat is split by segment:
@@ -244,7 +244,16 @@ The evidence for each finding is its worst 5–10 positions. They link to `/?gam
 
 ---
 
-## 7. Blunder-check habit training (milestone 5, independent)
+## 7. Blunder-check habit training (milestone 5): DONE
+
+> **Status (2026-11-10):** built and tested in the browser against the bot. Where it differs from the plan below:
+> - The board got `onMoveIntercept(move: Move) => boolean` and `overrideFen`. Every move path (drop, click, promotion) goes through `tryMove`, which checks the move against the shown position and then hands it to the interceptor. `stagedMove` wasn't needed: the play board passes the staged position as `overrideFen` and highlights the move's squares.
+> - The staged check lives in `blunderCheckAtom` (`sections/play/coach/states.ts`). The board stages the move and takes your answer; `useBlunderCheck`, run from the coach panel with `usePlayCoach`'s engine and eval cache, grades it. A takeback, a new game or resigning cancels it.
+> - **Sharp** is narrower than planned: a check, or a capture that doesn't lose material at first glance (it takes a piece worth at least as much, or an undefended one). With "any capture", almost every middlegame position counted, because there's nearly always some losing capture available, so Smart behaved like Every move.
+> - All modes skip forced moves, moves that end the game and moves into named opening positions (`data/openings.ts`). "Every move" means outside opening theory.
+> - Grading: correct = the best reply, or within 5% of it (an answer outside the top 3 is checked separately at depth 12); partial = in the top 3. A candidate losing 15% or more is "bad", and Change move becomes the main button. After Change move, your next move in that position isn't checked again. "Skip" plays the move without logging.
+> - Thresholds live in `BLUNDER_CHECK_THRESHOLDS`. The setting (Off / Smart / Every move, default Off) sits in the Play page's coach panel and works with the coach switched off.
+> - Each answered check is logged to `trainingLog` as kind "blunder-check" with `{ grade, candidateWasBad, changedMove, candidateLoss, … }`. `summarizeBlunderChecks` feeds Insights.
 
 This needs none of milestones 0–4, so it can be built at any point.
 

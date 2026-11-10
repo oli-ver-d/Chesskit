@@ -121,6 +121,7 @@ describe("computeInsights", () => {
     expect(insights.games).toBe(0);
     expect(insights.findings).toEqual([]);
     expect(insights.byClock).toEqual([]);
+    expect(insights.blunderChecks.checks).toBe(0);
   });
 
   it("splits your moves by phase and move number", () => {

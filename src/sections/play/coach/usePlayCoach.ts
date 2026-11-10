@@ -388,6 +388,7 @@ export const usePlayCoach = () => {
 
   return {
     engineReady: !!engine,
+    getEval,
     canHint,
     hintLevel: currentHintLevel,
     requestHint,

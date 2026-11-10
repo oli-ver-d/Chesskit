@@ -36,7 +36,8 @@ function CoachRead({ insights }: { insights: Insights }) {
   const { ask, get, hasKey, openSettings } = useCoachLLM();
   const [open, setOpen] = useState(false);
 
-  const key = `insights|${getFindingsKey(insights)}`;
+  const checks = insights.blunderChecks;
+  const key = `insights|${getFindingsKey(insights)}|${checks.checks}`;
   const messages = () =>
     buildWeaknessReportMessages({
       games: insights.games,
@@ -55,6 +56,11 @@ function CoachRead({ insights }: { insights: Insights }) {
         detail: f.detail,
         severity: f.severity,
       })),
+      other: checks.checks
+        ? [
+            `Blunder checks in play mode (before a move, the player tries to find the opponent's best reply): found it in ${checks.correct} of ${checks.checks} checks. The move they were about to play was a serious mistake ${checks.badCandidates} times; they changed it ${checks.saved} times.`,
+          ]
+        : undefined,
     });
   const cached = get(key);
 

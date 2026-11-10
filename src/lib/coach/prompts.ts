@@ -422,6 +422,8 @@ export interface WeaknessReportInput {
   /** Phase lines such as "middlegame: 3.1 blunders per 100 moves, accuracy 78%" */
   phases: string[];
   findings: { title: string; detail: string; severity: string }[];
+  /** Other facts, such as blunder-check results from play mode */
+  other?: string[];
 }
 
 export const buildWeaknessReportMessages = (
@@ -441,6 +443,9 @@ export const buildWeaknessReportMessages = (
     ...(input.findings.length
       ? input.findings.map((f) => `- [${f.severity}] ${f.title}. ${f.detail}`)
       : ["- No clear weakness stands out yet."]),
+    ...(input.other?.length
+      ? ["", "Other facts:", ...input.other.map((line) => `- ${line}`)]
+      : []),
   ];
 
   return [
@@ -568,6 +573,84 @@ export const buildOpeningPlanMessages = (
 
 Task: Talking to the player as "you", explain in 2-4 short sentences the plan or idea behind ${correctSan} in this opening, then what goes wrong with ${playedSan} (use the engine's reply).
 You may use general opening knowledge here (typical plans, pawn breaks, where the pieces go), but every claim must agree with the engine lines and the pawn structure given. Don't name other variations or quote theory you aren't sure of; if the plan isn't clear from the data, say so plainly and keep it general.`,
+    },
+  ];
+};
+
+export interface BlunderCheckInput {
+  /** Position before the player's candidate move, the player to move */
+  fen: string;
+  candidateUci: string;
+  /** The reply the player found for the opponent */
+  answerUci: string;
+  grade: "correct" | "partial" | "missed";
+  /** Engine's best line for the opponent after the candidate move */
+  bestLine: string[];
+  /** The candidate loses a lot of win chance against the best reply */
+  candidateWasBad: boolean;
+}
+
+const GRADE_FACTS: Record<BlunderCheckInput["grade"], string> = {
+  correct: "This is the engine's best reply (or just as good).",
+  partial: "This is one of the engine's top replies, but not the best one.",
+  missed: "This is not among the engine's top replies.",
+};
+
+export const buildBlunderCheckMessages = (
+  input: BlunderCheckInput
+): ChatMessage[] => {
+  const player = input.fen.split(" ")[1] as "w" | "b";
+  const opponent = player === "w" ? "b" : "w";
+  const candidateSan =
+    uciToSan(input.fen, input.candidateUci) ?? input.candidateUci;
+  let fenAfter: string | undefined;
+  try {
+    fenAfter = new Chess(input.fen).move(
+      uciMoveParams(input.candidateUci)
+    ).after;
+  } catch {
+    fenAfter = undefined;
+  }
+
+  const facts = [
+    `The player (${colorName(player)}) is about to play ${moveLabel(input.fen, candidateSan)}. Before committing, they were asked to find ${colorName(opponent)}'s best reply.`,
+    `Position before the move (FEN): ${input.fen}`,
+  ];
+  if (fenAfter) {
+    const answerSan = uciToSan(fenAfter, input.answerUci) ?? input.answerUci;
+    const bestSan = uciToSan(fenAfter, input.bestLine[0]) ?? input.bestLine[0];
+    facts.push(
+      `The player's answer: ${answerSan}. ${GRADE_FACTS[input.grade]}`,
+      `Engine's best reply for ${colorName(opponent)}: ${bestSan} (line: ${pvToSan(
+        fenAfter,
+        input.bestLine
+      )})`
+    );
+    const hanging = getHangingPieces(fenAfter, player);
+    if (hanging.length) {
+      facts.push(
+        `Player's pieces left en prise after ${candidateSan}: ${hanging.join(", ")}`
+      );
+    }
+    facts.push(`Material after ${candidateSan}: ${describeMaterial(fenAfter)}`);
+  }
+  facts.push(
+    input.candidateWasBad
+      ? `Engine verdict: ${candidateSan} loses a lot against this reply.`
+      : `Engine verdict: ${candidateSan} holds up against this reply.`
+  );
+
+  return [
+    { role: "system", content: SYSTEM_PROMPT },
+    {
+      role: "user",
+      content: `${facts.join("\n")}
+
+Task: Talking to the player as "you", explain in 1-3 short sentences what the opponent's best reply does (what it attacks, wins or threatens), following the engine line. ${
+        input.candidateWasBad
+          ? `Say plainly that ${candidateSan} runs into it, so they should think again.`
+          : `Say that ${candidateSan} holds up.`
+      } Don't suggest a different move for the player.`,
     },
   ];
 };

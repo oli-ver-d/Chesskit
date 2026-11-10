@@ -68,3 +68,13 @@ export const REPERTOIRE_THRESHOLDS = {
   /** Your usual move is replaced by the engine's when it loses this much on average */
   maxLoss: 8,
 } as const;
+
+/** Blunder-check habit training in play mode (`lib/training/blunderCheck.ts`) */
+export const BLUNDER_CHECK_THRESHOLDS = {
+  /** Share of quiet positions checked in Smart mode */
+  smartQuietRate: 0.25,
+  /** An answer this close to the best reply (opponent's win chance) is correct */
+  correctMargin: 5,
+  /** A candidate move losing this much to the best reply counts as bad */
+  badLoss: 15,
+} as const;
