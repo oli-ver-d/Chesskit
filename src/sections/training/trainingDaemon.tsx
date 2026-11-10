@@ -14,9 +14,11 @@ import { evaluationProgressAtom } from "@/sections/analysis/states";
 import {
   analysisDaemonStatusAtom,
   analysisPausedAtom,
+  analysisPriorityAtom,
   Profile,
   profileAtom,
 } from "./states";
+import { useChessComSync } from "./useChessComSync";
 
 /** Lets the page load (and the profile load from localStorage) first */
 const START_DELAY_MS = 3000;
@@ -37,8 +39,9 @@ const getPauseReason = (
 };
 
 /**
- * Keeps training data up to date in the background: backfills game metadata,
- * builds digests, and analyzes your recent unanalyzed games one at a time.
+ * Keeps training data up to date in the background: imports your chess.com
+ * games, backfills game metadata, builds digests, and analyzes your recent
+ * unanalyzed games one at a time (games queued with "Re-analyze" first).
  * Mounted once in the layout so it survives page changes. Renders nothing.
  */
 export default function TrainingDaemon() {
@@ -46,7 +49,11 @@ export default function TrainingDaemon() {
   const userPaused = useAtomValue(analysisPausedAtom);
   const playInProgress = useAtomValue(isGameInProgressAtom);
   const reviewProgress = useAtomValue(evaluationProgressAtom);
+  const priority = useAtomValue(analysisPriorityAtom);
+  const setPriority = useSetAtom(analysisPriorityAtom);
   const setStatus = useSetAtom(analysisDaemonStatusAtom);
+
+  useChessComSync();
 
   const pauseReason = getPauseReason(
     profile,
@@ -55,13 +62,13 @@ export default function TrainingDaemon() {
     !!reviewProgress
   );
 
-  const contextRef = useRef({ profile, pauseReason });
+  const contextRef = useRef({ profile, pauseReason, priority });
   const wakeRef = useRef<() => void>(() => undefined);
 
   useEffect(() => {
-    contextRef.current = { profile, pauseReason };
+    contextRef.current = { profile, pauseReason, priority };
     wakeRef.current();
-  }, [profile, pauseReason]);
+  }, [profile, pauseReason, priority]);
 
   useEffect(() => {
     let stopped = false;
@@ -108,7 +115,7 @@ export default function TrainingDaemon() {
         }
         dirty = false;
 
-        const { profile, pauseReason } = contextRef.current;
+        const { profile, pauseReason, priority } = contextRef.current;
         let refresh: Awaited<ReturnType<typeof refreshTrainingData>>;
         try {
           refresh = await refreshTrainingData(
@@ -128,7 +135,16 @@ export default function TrainingDaemon() {
           ]);
         }
 
-        const queue = refresh.toAnalyze.filter((id) => !unanalyzable.has(id));
+        const prioritized = priority.filter((id) => !unanalyzable.has(id));
+        if (prioritized.length !== priority.length) {
+          setPriority((ids) => ids.filter((id) => !unanalyzable.has(id)));
+        }
+        const queue = [
+          ...prioritized,
+          ...refresh.toAnalyze.filter(
+            (id) => !unanalyzable.has(id) && !prioritized.includes(id)
+          ),
+        ];
         const reason =
           pauseReason ??
           (engineUnsupported
@@ -159,6 +175,7 @@ export default function TrainingDaemon() {
         }
 
         const gameId = queue[0];
+        const force = prioritized.includes(gameId);
         setStatus({
           phase: "analyzing",
           pending: queue.length,
@@ -176,7 +193,8 @@ export default function TrainingDaemon() {
             gameId,
             workersNb,
             (value) =>
-              setStatus((prev) => ({ ...prev, currentProgress: value }))
+              setStatus((prev) => ({ ...prev, currentProgress: value })),
+            force
           );
           if (!ok) unanalyzable.add(gameId);
           else done++;
@@ -187,6 +205,7 @@ export default function TrainingDaemon() {
           shutdownEngine();
         }
 
+        if (force) setPriority((ids) => ids.filter((id) => id !== gameId));
         if (stopped) return;
         notify(["games", "digests"]);
         dirty = true;
@@ -203,7 +222,7 @@ export default function TrainingDaemon() {
       wakeRef.current = () => undefined;
       shutdownEngine();
     };
-  }, [setStatus]);
+  }, [setStatus, setPriority]);
 
   return null;
 }

@@ -91,7 +91,17 @@ Add `vitest` as a dev dependency with an `npm test` script, covering `src/lib/tr
 
 ---
 
-## 3. Chess.com auto-import (milestone 1)
+## 3. Chess.com auto-import (milestone 1): DONE
+
+> **Status (2026-11-10):** built and tested in the browser against the live chess.com API. Where it differs from the plan below:
+> - The first-sync range is a "Games to import" setting on the Train page (last 1 / 3 / 6 / 12 months / all, default 3), not a one-time prompt. Raising it later imports the older months on the next sync.
+> - The cursor records each archive fetched after its month ended (`completeArchives`); those are never refetched. The current month is refetched on every sync.
+> - Games are saved straight from the archive JSON and PGN headers, without parsing the moves with chess.js. That keeps big imports fast. A PGN the engine can't read is skipped by the background analysis.
+> - The sync runs from `useChessComSync`, called inside `TrainingDaemon`. Status lives in `chessComSyncStatusAtom`, and "Sync now" buttons bump `chessComSyncRequestAtom`.
+> - chess960 isn't imported; there's no flag for it.
+> - "Re-analyze" on the Database page queues the game in `analysisPriorityAtom`. The daemon analyzes those games first, even past the "games to analyze" limit, and replaces an existing eval. The queue lives in memory only.
+> - The Database page also gained pagination. It was hidden before, and the free DataGrid shows at most 100 rows per page.
+> - Ratings from `/stats` are stored in `meta` (`chessComRatings`) and shown as chips on the Train page. They aren't used for bot Elo or coach level yet.
 
 **Module:** `lib/sync/chessComSync.ts` (pure fetch and transform), plus a `useChessComSync` hook used by `TrainingDaemon`.
 

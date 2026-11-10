@@ -131,16 +131,18 @@ const stripUndefined = <T extends object>(value: T): T =>
 /**
  * Analyzes one saved game with the batch settings, then stores its eval and
  * digest. Returns false if the game can't be analyzed (no moves, bad PGN).
+ * With `force`, replaces an existing eval ("Re-analyze").
  */
 export const analyzeSavedGame = async (
   engine: UciEngine,
   gameId: number,
   workersNb: number,
-  onProgress?: (value: number) => void
+  onProgress?: (value: number) => void,
+  force = false
 ): Promise<boolean> => {
   const db = await getDb();
   const game = await db.get("games", gameId);
-  if (!game || game.eval) return true;
+  if (!game || (game.eval && !force)) return true;
 
   let params: ReturnType<typeof getEvaluateGameParams>;
   try {
@@ -164,7 +166,7 @@ export const analyzeSavedGame = async (
 
   // The game may have been deleted or analyzed on the Analysis page meanwhile
   const fresh = await db.get("games", gameId);
-  if (!fresh || fresh.eval) return true;
+  if (!fresh || (fresh.eval && !force)) return true;
 
   const analyzed: Game = { ...fresh, eval: gameEval };
   const digest = buildGameDigest(analyzed);

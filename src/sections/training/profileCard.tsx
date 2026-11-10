@@ -14,8 +14,19 @@ import { useAtom, useAtomValue } from "jotai";
 import { useEffect, useRef, useState } from "react";
 import { analysisDaemonStatusAtom, profileAtom } from "./states";
 import { useTrainingOverview } from "./useTrainingOverview";
+import {
+  ChessComRatingChips,
+  ChessComSyncStatusLine,
+} from "./chessComSyncControls";
 
 const ANALYZE_LIMITS = [25, 50, 100, 200, 500];
+const HISTORY_MONTHS = [
+  { value: 1, label: "Last month" },
+  { value: 3, label: "Last 3 months" },
+  { value: 6, label: "Last 6 months" },
+  { value: 12, label: "Last 12 months" },
+  { value: 0, label: "All games" },
+];
 
 /** Who you are on chess.com / lichess, and the background analysis settings */
 export default function ProfileCard() {
@@ -67,7 +78,7 @@ export default function ProfileCard() {
       </Typography>
       <Typography variant="body2" color="text.secondary" mb={2}>
         Training uses your own games. Tell Chesskit which player is you, and it
-        analyzes your saved games in the background.
+        imports your chess.com games and analyzes them in the background.
       </Typography>
 
       <Stack direction={{ xs: "column", sm: "row" }} gap={2} mb={2}>
@@ -87,6 +98,52 @@ export default function ProfileCard() {
           fullWidth
         />
       </Stack>
+
+      {profile.chessComUsername && (
+        <Stack gap={1.5} mb={2}>
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            gap={2}
+            alignItems={{ sm: "center" }}
+          >
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={profile.autoSync}
+                  onChange={(e) =>
+                    setProfile((prev) => ({
+                      ...prev,
+                      autoSync: e.target.checked,
+                    }))
+                  }
+                />
+              }
+              label="Import my chess.com games automatically"
+            />
+            <TextField
+              select
+              size="small"
+              label="Games to import"
+              value={profile.syncHistoryMonths}
+              onChange={(e) =>
+                setProfile((prev) => ({
+                  ...prev,
+                  syncHistoryMonths: Number(e.target.value),
+                }))
+              }
+              sx={{ minWidth: 200 }}
+            >
+              {HISTORY_MONTHS.map(({ value, label }) => (
+                <MenuItem key={value} value={value}>
+                  {label}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Stack>
+          <ChessComSyncStatusLine />
+          <ChessComRatingChips />
+        </Stack>
+      )}
 
       <Stack
         direction={{ xs: "column", sm: "row" }}

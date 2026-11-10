@@ -100,6 +100,17 @@ export type AnalysisDaemonPhase =
   | "analyzing"
   | "paused";
 
+export interface ChessComSyncStatus {
+  state: "idle" | "syncing" | "error";
+  /** Last successful sync, ms */
+  lastSyncAt?: number;
+  /** Games added by the last (or current) sync */
+  added?: number;
+  archivesDone?: number;
+  archivesTotal?: number;
+  error?: string;
+}
+
 export interface AnalysisDaemonStatus {
   phase: AnalysisDaemonPhase;
   /** Games waiting for engine analysis */

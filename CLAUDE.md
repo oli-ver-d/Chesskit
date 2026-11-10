@@ -18,7 +18,7 @@ npm run build    # static export to ./out
 npm run deploy   # lint + build + `cdk deploy` (AWS, upstream's chesskit.org stack)
 ```
 
-Tests cover only pure functions (`src/lib/gameMeta.ts`, `src/lib/training/**`). There are no component tests, so check UI changes in the browser.
+Tests cover only pure functions (`src/lib/gameMeta.ts`, `src/lib/training/**`, `src/lib/sync/**`). There are no component tests, so check UI changes in the browser.
 
 Docker alternative: `HOST_UID=$(id -u) HOST_GID=$(id -g) COMMAND=dev docker compose -f ./docker/docker-compose-dev.yml up` (use `COMMAND=lint` to lint). Production self-hosting: `docker compose -f ./docker/docker-compose-prod.yml up`.
 
@@ -34,7 +34,8 @@ Docker alternative: `HOST_UID=$(id -u) HOST_GID=$(id -g) COMMAND=dev docker comp
 
 **Training pipeline** (the fork's training features; plan and milestones in `TRAINING-PLAN.md`):
 - The profile (`profileAtom` in `sections/training/states.ts`) holds your chess.com and lichess usernames. `getMyColor` uses them to set each game's `myColor`; games played against the bot on the Play page (`Site "Chesskit.org"`, player "You") count as yours too.
-- `<TrainingDaemon />` is mounted in the layout. It loops over `refreshTrainingData` (backfills pre-v2 game fields, syncs `myColor`, rebuilds stale digests) and `analyzeSavedGame`, which analyzes your N newest unanalyzed games one at a time with Stockfish 18 lite (depth 14, multiPv 3).
+- chess.com auto-import (`lib/sync/chessComSync.ts`, driven by `sections/training/useChessComSync.ts`) runs on load if the last sync is over an hour old, every 30 minutes, and from "Sync now". Its cursor is in `meta` (`chessComSyncCursor`). Games are deduped on `externalId` (the game URL) through the unique `by-externalId` index. Fetch chess.com serially: parallel requests get 429s.
+- `<TrainingDaemon />` is mounted in the layout. It loops over `refreshTrainingData` (backfills pre-v2 game fields, syncs `myColor`, rebuilds stale digests) and `analyzeSavedGame`, which analyzes your N newest unanalyzed games one at a time with Stockfish 18 lite (depth 14, multiPv 3). Games queued in `analysisPriorityAtom` (the Database page's Re-analyze action) go first and replace any existing eval.
   - It pauses while a Play game is in progress, while the Analysis page is evaluating, or when you pause it from the NavBar indicator.
   - A game already being analyzed always finishes, because `evaluateGame` can't be cancelled safely.
 - A `GameDigest` (`lib/training/digest.ts`) holds per-move facts from your point of view: win chance before and after the move, best move, gap to the second-best move, phase, clock, hung piece, missed mate. Puzzles, insights and the repertoire should read digests rather than re-parse PGNs. Bump `DIGEST_VERSION` when digest logic changes; stored digests then rebuild from the saved evals without re-running the engine.
