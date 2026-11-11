@@ -78,8 +78,16 @@ export default function CoachPanel() {
   const isGameInProgress = useAtomValue(isGameInProgressAtom);
   const game = useAtomValue(gameAtom);
   const { get, hasKey, openSettings } = useCoachLLM();
-  const { canHint, hintLevel, requestHint, takeback, engineReady, getEval } =
-    usePlayCoach();
+  const {
+    canHint,
+    hintLevel,
+    requestHint,
+    takeback,
+    engineReady,
+    getEval,
+    previewId,
+    toggleBetterMove,
+  } = usePlayCoach();
   const [blunderCheckMode, setBlunderCheckMode] = useAtom(blunderCheckModeAtom);
   const { check, confirm, change, skip } = useBlunderCheck(getEval);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
@@ -113,25 +121,52 @@ export default function CoachPanel() {
       latestPly >= message.ply &&
       latestPly <= message.ply + 1;
 
+    const isPreviewing = previewId === message.id;
+
     return (
       <CoachBubble
         key={message.id}
         compact
         title={title}
+        subtitle={
+          message.betterMove ? (
+            <>
+              Better was <strong>{message.betterMove.san}</strong>
+            </>
+          ) : undefined
+        }
         classification={message.classification}
         content={content}
         onOpenSettings={openSettings}
         actions={
-          showTakeback ? (
-            <Button
-              size="small"
-              variant="contained"
-              color="warning"
-              startIcon={<Icon icon="mdi:undo" />}
-              onClick={() => takeback(message)}
-            >
-              Take back &amp; retry
-            </Button>
+          message.betterMove || showTakeback ? (
+            <>
+              {message.betterMove && (
+                <Button
+                  size="small"
+                  variant={isPreviewing ? "contained" : "outlined"}
+                  startIcon={
+                    <Icon
+                      icon={isPreviewing ? "mdi:arrow-u-left-top" : "mdi:eye"}
+                    />
+                  }
+                  onClick={() => toggleBetterMove(message)}
+                >
+                  {isPreviewing ? "Back to game" : "Show better move"}
+                </Button>
+              )}
+              {showTakeback && (
+                <Button
+                  size="small"
+                  variant="contained"
+                  color="warning"
+                  startIcon={<Icon icon="mdi:undo" />}
+                  onClick={() => takeback(message)}
+                >
+                  Take back &amp; retry
+                </Button>
+              )}
+            </>
           ) : undefined
         }
       />
@@ -186,7 +221,10 @@ export default function CoachPanel() {
           <ListItemIcon>
             <Checkbox size="small" checked={takebacks} sx={{ p: 0 }} />
           </ListItemIcon>
-          <ListItemText primary="Offer takebacks on mistakes" />
+          <ListItemText
+            primary="Offer takebacks on bad moves"
+            secondary="Inaccuracies, mistakes and blunders"
+          />
         </MenuItem>
         <MenuItem
           onClick={() => {

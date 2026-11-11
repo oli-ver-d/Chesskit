@@ -87,6 +87,8 @@ export const CLASSIFICATION_LABELS: Record<MoveClassification, string> = {
 
 interface Props {
   title?: ReactNode;
+  /** A line under the title, shown even while the AI text loads */
+  subtitle?: ReactNode;
   classification?: MoveClassification;
   content?: CoachText;
   placeholder?: ReactNode;
@@ -98,6 +100,7 @@ interface Props {
 
 export default function CoachBubble({
   title,
+  subtitle,
   classification,
   content,
   placeholder,
@@ -163,6 +166,12 @@ export default function CoachBubble({
               {title}
             </Typography>
           </Stack>
+        )}
+
+        {subtitle && (
+          <Typography variant="body2" sx={{ mb: 0.3 }}>
+            {subtitle}
+          </Typography>
         )}
 
         {content?.status === "loading" && (
