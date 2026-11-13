@@ -1,0 +1,12 @@
+{
+  // Cloudflare Workers static-assets deployment of the static export in ./out.
+  // Deploy with `npm run deploy:cf` (run `npx wrangler login` once first).
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "chesskit",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./out",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  }
+}

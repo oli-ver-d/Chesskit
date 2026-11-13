@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "eslint --ext .ts,.tsx src/ && tsc --noEmit",
     "test": "vitest run",
-    "deploy": "npm run lint && npm run build && cdk deploy"
+    "deploy": "npm run lint && npm run build && cdk deploy",
+    "deploy:cf": "npm run build && npx wrangler deploy"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
