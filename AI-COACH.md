@@ -22,6 +22,9 @@ idea.
   the idea.
 - Moves are explained automatically as you step through (debounced). You can turn
   this off in the coach settings and use the **Explain this move** button instead.
+- **Best move** (on any move that wasn't the engine's first choice) shows the
+  engine's move and line, has the coach explain why it was better, and can play
+  it on the board as a side line.
 - **AI game summary** writes a short game review: overview, key moments and what
   to work on.
 - Moves off the main line can be explained too, once the engine has reached depth 10.

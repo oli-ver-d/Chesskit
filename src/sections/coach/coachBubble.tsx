@@ -26,6 +26,11 @@ const renderInline = (text: string): ReactNode[] =>
       )
     );
 
+/** Coach text inside a sentence or an alert: renders **bold**, no blocks */
+export function CoachInline({ text }: { text: string }) {
+  return <>{renderInline(text)}</>;
+}
+
 /** Minimal Markdown: paragraphs, bullet lists and bold */
 export function CoachMarkdown({ text }: { text: string }) {
   const blocks: ReactNode[] = [];

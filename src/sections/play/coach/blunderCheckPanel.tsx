@@ -8,6 +8,7 @@ import {
 } from "@mui/material";
 import { Icon } from "@iconify/react";
 import { colorName, pvToSan, uciToSan } from "@/lib/coach/facts";
+import { CoachInline } from "@/sections/coach/coachBubble";
 import { useCoachLLM } from "@/sections/coach/useCoachLLM";
 import { BlunderCheck } from "./states";
 
@@ -132,7 +133,7 @@ export default function BlunderCheckPanel({
       </Typography>
       {coach?.status === "done" && coach.text ? (
         <Typography variant="body2" mt={0.5}>
-          {coach.text}
+          <CoachInline text={coach.text} />
         </Typography>
       ) : coach?.status === "loading" ? (
         <Typography variant="body2" mt={0.5} color="text.secondary">

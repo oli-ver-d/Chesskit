@@ -35,6 +35,7 @@ import {
   updateRepertoireNode,
 } from "@/lib/training/repertoireStore";
 import { TRAINING_THRESHOLDS } from "@/lib/training/thresholds";
+import { CoachInline } from "@/sections/coach/coachBubble";
 import { useCoachLLM } from "@/sections/coach/useCoachLLM";
 import { Color } from "@/types/enums";
 import { CurrentPosition } from "@/types/eval";
@@ -532,11 +533,13 @@ export default function OpeningDrill({ repertoire, line, onEnd }: Props) {
                 {describeSource(offBook.entry)}
               </Alert>
               <Typography variant="body2" color="text.secondary">
-                {plan?.status === "done" && plan.text
-                  ? plan.text
-                  : plan?.status === "loading"
-                    ? "The coach is thinking…"
-                    : staticExplanation(offBook)}
+                {plan?.status === "done" && plan.text ? (
+                  <CoachInline text={plan.text} />
+                ) : plan?.status === "loading" ? (
+                  "The coach is thinking…"
+                ) : (
+                  staticExplanation(offBook)
+                )}
               </Typography>
               <Typography variant="body2">
                 Play {offBook.entry.san} to go on.

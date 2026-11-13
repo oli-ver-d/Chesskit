@@ -12,6 +12,7 @@ import {
   getGamePhase,
   getHangingPieces,
   moveLabel,
+  pieceOnSquare,
   pvToSan,
   uciToSan,
 } from "./facts";
@@ -194,6 +195,112 @@ export const buildMoveExplanationMessages = (
         input.audience,
         bestMoveSan
       )}`,
+    },
+  ];
+};
+
+/** The engine's line for its best move in `input.fenBefore` */
+const getBestLineBefore = (input: MoveCoachInput) => {
+  const bestUci = input.evalBefore.bestMove ?? input.evalBefore.lines[0]?.pv[0];
+  const line =
+    input.evalBefore.lines.find((l) => l.pv[0] === bestUci) ??
+    input.evalBefore.lines[0];
+  return { bestUci, line };
+};
+
+/** "Best line: 14. Nxe5 d6 15. Bb5+. Evaluation: ..." for when there's no API key */
+export const getBestMoveSummary = (input: MoveCoachInput): string => {
+  const { line } = getBestLineBefore(input);
+  if (!line?.pv.length) return "";
+  return `Engine line: ${pvToSan(input.fenBefore, line.pv)}. Evaluation after it: ${describeEval(line)}.`;
+};
+
+/** Why the engine's best move was better than the move played */
+export const buildBestMoveMessages = (input: MoveCoachInput): ChatMessage[] => {
+  const mover = input.fenBefore.split(" ")[1] as "w" | "b";
+  const opponent = mover === "w" ? "b" : "w";
+  const { bestUci, line } = getBestLineBefore(input);
+  const bestSan = uciToSan(input.fenBefore, bestUci) ?? bestUci ?? "?";
+  const playedAfter = input.evalAfter.lines[0];
+
+  const facts: string[] = [
+    `${colorName(mover)} played ${moveLabel(input.fenBefore, input.san)}${
+      input.classification
+        ? ` (engine classification: ${CLASSIFICATION_NAMES[input.classification]})`
+        : ""
+    }.`,
+    `Position before the move (FEN): ${input.fenBefore}`,
+    `Game phase: ${getGamePhase(input.fenBefore, input.plyIndex)}`,
+    `Engine's best move: ${bestSan}${
+      line?.pv.length ? ` (line: ${pvToSan(input.fenBefore, line.pv)})` : ""
+    }`,
+    `Evaluation after the best move: ${describeEval(line)}`,
+    `Evaluation after the move played: ${input.san.includes("#") ? "checkmate" : describeEval(playedAfter)}`,
+  ];
+
+  if (playedAfter?.pv?.length) {
+    facts.push(
+      `${colorName(opponent)}'s best reply to ${input.san}: ${pvToSan(
+        input.fenAfter,
+        playedAfter.pv,
+        4
+      )}`
+    );
+  }
+
+  let fenAfterBest: string | undefined;
+  try {
+    const best = new Chess(input.fenBefore).move(uciMoveParams(bestUci ?? ""));
+    fenAfterBest = best.after;
+    if (best.captured) {
+      facts.push(
+        `${bestSan} captures the ${pieceOnSquare(input.fenBefore, best.to) ?? "pawn"} on ${best.to}.`
+      );
+    }
+    if (best.san.includes("#")) facts.push(`${bestSan} is checkmate.`);
+    else if (best.san.includes("+")) facts.push(`${bestSan} gives check.`);
+  } catch {
+    fenAfterBest = undefined;
+  }
+
+  const oppHanging = getHangingPieces(input.fenBefore, opponent);
+  if (oppHanging.length) {
+    facts.push(
+      `${colorName(opponent)} pieces that could be attacked before the move: ${oppHanging.join(", ")}`
+    );
+  }
+  const moverHanging = getHangingPieces(input.fenBefore, mover);
+  if (moverHanging.length) {
+    facts.push(
+      `${colorName(mover)} pieces en prise before the move: ${moverHanging.join(", ")}`
+    );
+  }
+  if (fenAfterBest) {
+    const stillHanging = getHangingPieces(fenAfterBest, mover);
+    facts.push(
+      stillHanging.length
+        ? `${colorName(mover)} pieces en prise after ${bestSan}: ${stillHanging.join(", ")}`
+        : `After ${bestSan} no ${colorName(mover)} piece is en prise.`
+    );
+    facts.push(`Material after ${bestSan}: ${describeMaterial(fenAfterBest)}`);
+  }
+  const hangingAfterPlayed = getHangingPieces(input.fenAfter, mover);
+  if (hangingAfterPlayed.length) {
+    facts.push(
+      `${colorName(mover)} pieces en prise after ${input.san}: ${hangingAfterPlayed.join(", ")}`
+    );
+  }
+
+  const who =
+    input.audience === "player"
+      ? 'Talk directly to the player who made the move ("you").'
+      : "Refer to the sides as White and Black.";
+
+  return [
+    { role: "system", content: SYSTEM_PROMPT },
+    {
+      role: "user",
+      content: `${facts.join("\n")}\n\nTask: ${who} In 2-3 short sentences explain why ${bestSan} was the best move here (what it wins, threatens, defends or prevents, following the engine line) and what it does better than ${input.san}.`,
     },
   ];
 };

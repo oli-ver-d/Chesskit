@@ -1,6 +1,7 @@
 import { Button, Stack } from "@mui/material";
-import { useAtomValue } from "jotai";
-import { useEffect, useMemo } from "react";
+import { useAtomValue, useSetAtom } from "jotai";
+import { useEffect, useMemo, useState } from "react";
+import { Chess } from "chess.js";
 import { Icon } from "@iconify/react";
 import { boardAtom, currentPositionAtom, gameEvalAtom } from "../../states";
 import CoachBubble, {
@@ -8,8 +9,15 @@ import CoachBubble, {
 } from "@/sections/coach/coachBubble";
 import { useCoachLLM } from "@/sections/coach/useCoachLLM";
 import { reviewAutoExplainAtom } from "@/sections/coach/states";
-import { buildMoveExplanationMessages } from "@/lib/coach/prompts";
-import { moveLabel } from "@/lib/coach/facts";
+import {
+  buildBestMoveMessages,
+  buildMoveExplanationMessages,
+  getBestMoveSummary,
+  MoveCoachInput,
+} from "@/lib/coach/prompts";
+import { moveLabel, uciToSan } from "@/lib/coach/facts";
+import { uciMoveParams } from "@/lib/chess";
+import { MoveClassification } from "@/types/enums";
 import GameSummaryButton from "./gameSummary";
 
 const MIN_DEPTH_FOR_EXPLANATION = 10;
@@ -20,6 +28,9 @@ export default function CoachComment() {
   const gameEval = useAtomValue(gameEvalAtom);
   const autoExplain = useAtomValue(reviewAutoExplainAtom);
   const { ask, get, hasKey, openSettings } = useCoachLLM();
+  const setBoard = useSetAtom(boardAtom);
+  /** Key of the move whose "best move" bubble is open */
+  const [bestOpenKey, setBestOpenKey] = useState<string>();
 
   const lastMove = position.lastMove;
   const evalBefore = position.lastEval;
@@ -37,20 +48,37 @@ export default function CoachComment() {
     if (!deepEnough) return undefined;
 
     const uci = `${lastMove.from}${lastMove.to}${lastMove.promotion ?? ""}`;
+    const input: MoveCoachInput = {
+      fenBefore: lastMove.before,
+      fenAfter: lastMove.after,
+      san: lastMove.san,
+      uci,
+      evalBefore,
+      evalAfter,
+      classification: evalAfter.moveClassification,
+      opening: evalAfter.opening ?? position.opening,
+      plyIndex: board.history().length - 1,
+      audience: "review",
+    };
+
+    // What the engine preferred, when the move played wasn't its first choice
+    const bestUci = evalBefore.bestMove ?? evalBefore.lines[0].pv[0];
+    const bestSan = uciToSan(lastMove.before, bestUci);
+    const best =
+      bestUci && bestSan && bestUci !== uci
+        ? {
+            uci: bestUci,
+            label: moveLabel(lastMove.before, bestSan),
+            key: `best|${lastMove.before}|${bestUci}|${uci}`,
+            messages: buildBestMoveMessages(input),
+            summary: getBestMoveSummary(input),
+          }
+        : undefined;
+
     return {
       key: `move|${lastMove.before}|${uci}`,
-      messages: buildMoveExplanationMessages({
-        fenBefore: lastMove.before,
-        fenAfter: lastMove.after,
-        san: lastMove.san,
-        uci,
-        evalBefore,
-        evalAfter,
-        classification: evalAfter.moveClassification,
-        opening: evalAfter.opening ?? position.opening,
-        plyIndex: board.history().length - 1,
-        audience: "review",
-      }),
+      messages: buildMoveExplanationMessages(input),
+      best,
     };
   }, [
     lastMove,
@@ -73,6 +101,30 @@ export default function CoachComment() {
     }, 450);
     return () => clearTimeout(timeout);
   }, [request?.key, hasKey, autoExplain, isFromGameReview]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const best = request?.best;
+  const bestOpen = !!best && bestOpenKey === best.key;
+
+  const toggleBest = () => {
+    if (!best) return;
+    if (bestOpen) return setBestOpenKey(undefined);
+    setBestOpenKey(best.key);
+    if (hasKey) ask(best.key, best.messages);
+  };
+
+  /** Swaps the move played for the engine's move, as a line off the game */
+  const playBestOnBoard = () => {
+    if (!best) return;
+    const next = new Chess();
+    try {
+      next.loadPgn(board.pgn());
+      next.undo();
+      next.move(uciMoveParams(best.uci));
+    } catch {
+      return;
+    }
+    setBoard(next);
+  };
 
   const showSummary = !!gameEval;
 
@@ -133,7 +185,39 @@ export default function CoachComment() {
             : undefined
         }
         onOpenSettings={openSettings}
+        actions={
+          best && (
+            <Button
+              size="small"
+              startIcon={<Icon icon="mdi:star-outline" />}
+              onClick={toggleBest}
+            >
+              {bestOpen ? "Hide best move" : "Best move"}
+            </Button>
+          )
+        }
       />
+      {best && bestOpen && (
+        <CoachBubble
+          title={`Best was ${best.label}`}
+          classification={MoveClassification.Best}
+          content={hasKey ? get(best.key) : undefined}
+          placeholder={
+            <span style={{ fontSize: "0.875rem" }}>{best.summary}</span>
+          }
+          onRetry={() => ask(best.key, best.messages, { force: true })}
+          onOpenSettings={openSettings}
+          actions={
+            <Button
+              size="small"
+              startIcon={<Icon icon="mdi:chess-knight" />}
+              onClick={playBestOnBoard}
+            >
+              Play it on the board
+            </Button>
+          }
+        />
+      )}
       {showSummary && <GameSummaryButton />}
     </Stack>
   );

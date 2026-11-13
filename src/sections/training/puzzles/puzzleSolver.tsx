@@ -20,13 +20,21 @@ import { DEFAULT_ENGINE } from "@/constants";
 import { useEngine } from "@/hooks/useEngine";
 import { getDb, notifyDbChange } from "@/lib/db";
 import { isWasmSupported } from "@/lib/engine/shared";
-import { colorName, pvToSan, winChanceFor } from "@/lib/coach/facts";
+import { uciMoveParams } from "@/lib/chess";
+import {
+  colorName,
+  describeEval,
+  pvToSan,
+  winChanceFor,
+} from "@/lib/coach/facts";
+import { useChessActions } from "@/hooks/useChessActions";
+import { CoachInline } from "@/sections/coach/coachBubble";
 import { buildPuzzleCoachMessages } from "@/lib/coach/prompts";
 import { recordPuzzleAttempt } from "@/lib/training/puzzleStore";
 import { TRAINING_THRESHOLDS } from "@/lib/training/thresholds";
 import { useCoachLLM } from "@/sections/coach/useCoachLLM";
 import { Color } from "@/types/enums";
-import { CurrentPosition } from "@/types/eval";
+import { CurrentPosition, PositionEval } from "@/types/eval";
 import { Game } from "@/types/game";
 import { Puzzle, PuzzleResult } from "@/types/training";
 import {
@@ -44,6 +52,8 @@ const MAX_WRONG = 3;
 
 const ANSWER_COLOR = "#81b64c";
 const REFUTATION_COLOR = "#e05b4b";
+/** The expected reply to the best move, while playing on after the puzzle */
+const REPLY_COLOR = "rgba(240, 160, 60, 0.75)";
 const HINT_SQUARE_STYLE: CSSProperties = {
   boxShadow: "inset 0 0 0 4px rgba(59, 154, 198, 0.95)",
 };
@@ -84,6 +94,9 @@ export default function PuzzleSolver({ puzzle, onNext, onSkip }: Props) {
   const [recorded, setRecorded] = useState(false);
   const [boardWidth, setBoardWidth] = useState(0);
   const [boardBox, setBoardBox] = useState<HTMLDivElement | null>(null);
+  /** Evals of the positions reached while playing on after the puzzle */
+  const [evals, setEvals] = useState<Record<string, PositionEval>>({});
+  const { playMove, undoMove } = useChessActions(gameAtom);
 
   const context = getPuzzleContext(puzzle, savedGame ?? undefined);
   const { previousMove } = context;
@@ -229,23 +242,62 @@ export default function PuzzleSolver({ puzzle, onNext, onSkip }: Props) {
     if (level === 1) askNudge();
   };
 
+  // Once the puzzle is over the board is free: play on for either side, with
+  // the engine's eval and best moves shown for every position you reach.
+  const done = phase === "solved" || phase === "revealed";
+  const fen = game.fen();
+  const history = game.history({ verbose: true });
+  const lastPlayed = history.at(-1);
+  const currentEval = done ? evals[fen] : undefined;
+  const hasEval = !!evals[fen];
+
+  useEffect(() => {
+    if (!done || hasEval || !engine?.getIsReady()) return;
+    engine
+      .analysePosition(fen, LIVE_DEPTH)
+      .then((result) => setEvals((prev) => ({ ...prev, [fen]: result })))
+      .catch((error) => console.error("Puzzle follow-up eval failed", error));
+  }, [done, hasEval, engine, fen]);
+
+  useEffect(() => {
+    if (!done) return;
+    setPosition({ lastMove: lastPlayed ?? previousMove, eval: currentEval });
+  }, [done, fen, currentEval, previousMove]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // At the puzzle position the stored answer wins over a fresh search, so the
+  // arrow always matches the solution text.
+  const nextLine =
+    history.length === 0
+      ? (context.bestLine ?? [puzzle.bestUci])
+      : (currentEval?.lines[0]?.pv ?? []);
+  const evalLine = currentEval?.lines[0];
+  const myWin = winChanceFor(evalLine, myColor);
+
+  const playBest = () => {
+    if (nextLine[0]) playMove(uciMoveParams(nextLine[0]));
+  };
+
   const engineLoading = !engine && isWasmSupported();
-  const canPlay = phase === "solving" && !engineLoading ? myColor : false;
+  const canPlay = done
+    ? true
+    : phase === "solving" && !engineLoading && myColor;
 
   const arrows: Arrow[] = [];
+  if (done && !game.isGameOver()) {
+    const [best, reply] = nextLine;
+    if (best) {
+      arrows.push([best.slice(0, 2), best.slice(2, 4), ANSWER_COLOR] as Arrow);
+    }
+    if (reply) {
+      arrows.push([reply.slice(0, 2), reply.slice(2, 4), REPLY_COLOR] as Arrow);
+    }
+  }
   if (phase === "wrong" && attempt?.refutation?.[0]) {
     const reply = attempt.refutation[0];
     arrows.push([
       reply.slice(0, 2),
       reply.slice(2, 4),
       REFUTATION_COLOR,
-    ] as Arrow);
-  }
-  if (phase === "revealed") {
-    arrows.push([
-      puzzle.bestUci.slice(0, 2),
-      puzzle.bestUci.slice(2, 4),
-      ANSWER_COLOR,
     ] as Arrow);
   }
 
@@ -282,6 +334,7 @@ export default function PuzzleSolver({ puzzle, onNext, onSkip }: Props) {
             boardOrientation={myColor}
             currentPositionAtom={positionAtom}
             extraArrows={arrows}
+            showEvaluationBar={done}
             customSquareStyles={squareStyles}
           />
         )}
@@ -347,9 +400,11 @@ export default function PuzzleSolver({ puzzle, onNext, onSkip }: Props) {
                 severity="info"
                 icon={<Icon icon="mdi:lightbulb-outline" />}
               >
-                {nudge?.status === "loading"
-                  ? "The coach is thinking…"
-                  : nudgeText}
+                {nudge?.status === "loading" ? (
+                  "The coach is thinking…"
+                ) : (
+                  <CoachInline text={nudgeText} />
+                )}
                 {hintLevel >= 2 && <Box mt={1}>{getPieceHint(puzzle)}</Box>}
               </Alert>
             )}
@@ -388,11 +443,13 @@ export default function PuzzleSolver({ puzzle, onNext, onSkip }: Props) {
                 </MuiLink>
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                {explanation?.status === "done" && explanation.text
-                  ? explanation.text
-                  : explanation?.status === "loading"
-                    ? "The coach is thinking…"
-                    : getStaticExplanation(puzzle, context)}
+                {explanation?.status === "done" && explanation.text ? (
+                  <CoachInline text={explanation.text} />
+                ) : explanation?.status === "loading" ? (
+                  "The coach is thinking…"
+                ) : (
+                  getStaticExplanation(puzzle, context)
+                )}
               </Typography>
               {llm.hasKey && !explanation && (
                 <Box>
@@ -406,6 +463,60 @@ export default function PuzzleSolver({ puzzle, onNext, onSkip }: Props) {
                 </Box>
               )}
             </Stack>
+          )}
+
+          {done && (
+            <Box
+              sx={{
+                borderRadius: 1,
+                border: 1,
+                borderColor: "divider",
+                px: 1.5,
+                py: 1,
+              }}
+            >
+              <Typography variant="subtitle2">Play it out</Typography>
+              <Typography variant="body2">
+                {game.isCheckmate()
+                  ? "Checkmate."
+                  : game.isGameOver()
+                    ? "The game is drawn here."
+                    : evalLine
+                      ? `${describeEval(evalLine)}${
+                          myWin !== undefined && evalLine.mate === undefined
+                            ? `, ${Math.round(myWin)}% win chance for you`
+                            : ""
+                        }.`
+                      : "Evaluating…"}
+              </Typography>
+              {!game.isGameOver() && nextLine.length > 0 && (
+                <Typography variant="body2" color="text.secondary">
+                  Best line: {pvToSan(fen, nextLine)}
+                </Typography>
+              )}
+              <Typography variant="caption" color="text.secondary">
+                Move either side on the board. Green is the best move, orange
+                the expected reply.
+              </Typography>
+              <Stack direction="row" gap={1} mt={0.5}>
+                <Button
+                  size="small"
+                  startIcon={<Icon icon="mdi:undo" />}
+                  disabled={history.length === 0}
+                  onClick={undoMove}
+                >
+                  Back
+                </Button>
+                <Button
+                  size="small"
+                  endIcon={<Icon icon="mdi:chevron-right" />}
+                  disabled={!nextLine[0] || game.isGameOver()}
+                  onClick={playBest}
+                >
+                  Play best move
+                </Button>
+              </Stack>
+            </Box>
           )}
 
           <Stack direction="row" gap={1} flexWrap="wrap">
